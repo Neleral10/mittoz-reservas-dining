@@ -44,8 +44,8 @@ export default function App() {
         if (newSession?.user) {
           const p = await obtenerPerfil();
           setPerfil(p);
-window.history.pushState({}, "", "/dashboard");
-        setRuta("/dashboard");
+          window.history.pushState({}, "", "/dashboard");
+          setRuta("/dashboard");
           
         } else {
           setPerfil(null);
