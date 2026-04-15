@@ -222,7 +222,7 @@ export default function Login({ onLoginSuccess }) {
             fontFamily: "'Inter', sans-serif",
             color: "#a08968",
           }}>
-            ¿Problemas para entrar? Contacta a tu administrador
+            ¿Problemas para entrar? Contacta a tu ¿Olvidaste tu contraseña? <button onClick={async () => { const email = document.querySelector('input[type="email"]')?.value; if (!email) { alert("Ingresa tu correo primero"); return; } const { supabase } = await import("../lib/supabase"); const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: "https://mittoz-reservas-dining.vercel.app/update-password" }); if (error) alert(error.message); else alert("✅ Revisa tu correo para restablecer tu contraseña"); }} style={{ background: "none", border: "none", color: "#8B6914", fontSize: 13, cursor: "pointer", textDecoration: "underline" }}>Haz clic aquí</button>
           </div>
         </div>
 
