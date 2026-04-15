@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import UpdatePassword from "./UpdatePassword";
 import { Loader2 } from "lucide-react";
 import { supabase, obtenerPerfil } from "./lib/supabase";
 import Landing from "./pages/Landing.jsx";
@@ -89,7 +90,7 @@ export default function App() {
     return <Login onLoginSuccess={() => navegar("/dashboard")} />;
   }
 
-  // RUTA: /dashboard
+  // RUTA: /update-password   if (ruta === "/update-password") {     return <UpdatePassword />;   }    // RUTA: /dashboard
   if (ruta === "/dashboard" || ruta.startsWith("/dashboard")) {
     // Si no está logueado, redirigir al login
     if (!sesion || !perfil) {
