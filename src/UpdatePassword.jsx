@@ -5,7 +5,7 @@ export default function UpdatePassword() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [msg, setMsg] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false);F
 
   async function handleUpdate(e) {
     e.preventDefault();
