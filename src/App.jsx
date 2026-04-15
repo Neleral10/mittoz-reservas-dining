@@ -58,6 +58,9 @@ export default function App() {
   }, []);
 
   // Pantalla de carga inicial mientras checamos sesión
+  if (ruta.startsWith("/update-password")) {
+    return <UpdatePassword token={new URLSearchParams(window.location.search).get("token")} />;
+  }
   if (cargandoSesion) {
     return (
       <div style={{
