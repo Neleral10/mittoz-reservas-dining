@@ -90,7 +90,7 @@ export default function App() {
     return <Login onLoginSuccess={() => navegar("/dashboard")} />;
   }
 
-  // RUTA: /update-password   if (ruta === "/update-password") {     return <UpdatePassword />;   }    // RUTA: /dashboard
+  // RUTA: /update-password   if (ruta.startsWith("/update-password")) {     return <UpdatePassword token={new URLSearchParams(window.location.search).get("token")} />;   } Commit → prueba el link del correo de nuevo.     return <UpdatePassword />;   }    // RUTA: /dashboard
   if (ruta === "/dashboard" || ruta.startsWith("/dashboard")) {
     // Si no está logueado, redirigir al login
     if (!sesion || !perfil) {
