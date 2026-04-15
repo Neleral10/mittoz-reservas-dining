@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { supabase } from "./lib/supabase";
 
 export default function UpdatePassword() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [msg, setMsg] = useState("");
-  const [loading, setLoading] = useState(false);F
+  const [loading, setLoading] = useState(false);
 
   async function handleUpdate(e) {
     e.preventDefault();
