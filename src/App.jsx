@@ -4,7 +4,7 @@ import { Loader2 } from "lucide-react";
 import { supabase, obtenerPerfil } from "./lib/supabase";
 import Landing from "./pages/Landing.jsx";
 import Login from "./pages/Login.jsx";
-import Dashboard from "./pages/Dashboard.jsx";
+import Dashboard from "./pages/Dashboard.jsx";import CorteComisiones from "./CorteComisiones";
 
 export default function App() {
   const [ruta, setRuta] = useState(window.location.pathname);
@@ -93,6 +93,27 @@ export default function App() {
     return <Login onLoginSuccess={() => navegar("/dashboard")} />;
   }
 
+ // RUTA: /comisiones — solo admin
+if (ruta === "/comisiones") {
+  if (!sesion || !perfil) { navegar("/login"); return null; }
+  return (
+    <div style={{ minHeight: "100vh", background: "#f5ead8", fontFamily: "'Inter', sans-serif" }}>
+      <div style={{ background: "#1a1410", padding: "0.75rem 1.25rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div>
+          <div style={{ color: "#c9b896", fontSize: "0.7rem", letterSpacing: "0.1em", textTransform: "uppercase" }}>Holbox Dining · Panel</div>
+          <div style={{ color: "#f5ead8", fontSize: "1.1rem", fontWeight: 700 }}>Comisiones Semanales</div>
+        </div>
+        <button
+          onClick={() => navegar("/dashboard")}
+          style={{ background: "none", border: "1px solid #3d2b1f", color: "#c9b896", borderRadius: 8, padding: "0.4rem 0.9rem", cursor: "pointer", fontSize: "0.85rem" }}
+        >
+          ← Volver
+        </button>
+      </div>
+      <CorteComisiones userRole={perfil?.rol} />
+    </div>
+  );
+}
   // RUTA: /update-password   if (ruta.startsWith("/update-password")) {     return <UpdatePassword token={new URLSearchParams(window.location.search).get("token")} />;   } Commit → prueba el link del correo de nuevo.     return <UpdatePassword />;   }    // RUTA: /dashboard
   if (ruta === "/dashboard" || ruta.startsWith("/dashboard")) {
     // Si no está logueado, redirigir al login
