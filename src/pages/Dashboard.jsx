@@ -4,7 +4,8 @@ import {
   CheckCircle2, XCircle, Loader2, RefreshCw, Filter, User, Sparkles,
   DollarSign, ClipboardList, History
 } from "lucide-react";
-import { supabase, RESTAURANTES_INFO } from "../lib/supabase";
+import { supabase, RESTAURANTES_INFO } from "../lib/supabase";import CorteComisiones from "../CorteComisiones";
+
 
 const ROL_LABEL = {
   admin: "Administrador",
@@ -154,7 +155,7 @@ export default function Dashboard({ perfil, onLogout }) {
   const puedeVerValidaciones = ["admin", "fb_manager", "validador"].includes(perfil.rol);
   const puedeVerHistorico = ["admin", "fb_manager"].includes(perfil.rol);
 
-  const titulos = { hoy: "Reservaciones de hoy", validaciones: "Cola de validaciones", historico: "Histórico de comisiones" };
+  const titulos = { hoy: "Reservaciones de hoy", validaciones: "Cola de validaciones", historico: "Histórico de comisiones", comisiones: "Corte de Comisiones" };
 
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #f5ead8 0%, #ebdcc0 100%)", fontFamily: "'Inter', -apple-system, sans-serif", color: "#2c2416" }}>
@@ -181,7 +182,7 @@ export default function Dashboard({ perfil, onLogout }) {
         <div style={{ maxWidth: "1100px", margin: "0 auto", display: "flex", gap: "4px", paddingBottom: "0" }}>
           <TabBtn active={tab === "hoy"} onClick={() => setTab("hoy")} icon={<Calendar size={13} />} label="Hoy" />
           {puedeVerValidaciones && <TabBtn active={tab === "validaciones"} onClick={() => setTab("validaciones")} icon={<ClipboardList size={13} />} label="Validaciones" badge={validaciones.length > 0 ? validaciones.length : null} />}
-          {puedeVerHistorico && <TabBtn active={tab === "historico"} onClick={() => setTab("historico")} icon={<History size={13} />} label="Histórico" />}
+          {puedeVerHistorico && <TabBtn active={tab === "historico"} onClick={() => setTab("historico")} icon={<History size={13} />} label="Histórico" />}{perfil?.rol === 'admin' && <TabBtn active={tab === "comisiones"} onClick={() => setTab("comisiones")} icon={<DollarSign size={13} />} label="Comisiones" />}
         </div>
       </header>
 
@@ -278,7 +279,13 @@ export default function Dashboard({ perfil, onLogout }) {
           </>
         )}
 
-        {/* TAB: HISTÓRICO */}
+        
+        {/* TAB: COMISIONES */}
+{tab === "comisiones" && (
+  <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "16px 0" }}>
+    <CorteComisiones userRole={perfil?.rol} />
+  </div>
+)}
         {tab === "historico" && (
           <>
             <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px", flexWrap: "wrap" }}>
