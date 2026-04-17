@@ -38,6 +38,7 @@ export default function App() {
       setTimeout(() => setCargandoSesion(false), 200);
     };
     revisarSesion();
+    setTimeout(() => setCargandoSesion(false), 3000);
 
     // Escuchar cambios de autenticación
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
