@@ -35,7 +35,7 @@ export default function App() {
         const p = await obtenerPerfil();
         setPerfil(p);
       }
-      setCargandoSesion(false);
+      setTimeout(() => setCargandoSesion(false), 200);
     };
     revisarSesion();
 
@@ -46,8 +46,10 @@ export default function App() {
         if (newSession?.user) {
           const p = await obtenerPerfil();
           setPerfil(p);
-          window.history.pushState({}, "", "/dashboard");
-          setRuta("/dashboard");
+          if (ruta === "/" || ruta === "/login") {
+           window.history.pushState({}, "", "/dashboard");
+           setRuta("/dashboard");
+           }     
           
         } else {
           setPerfil(null);
