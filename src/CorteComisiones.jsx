@@ -1,11 +1,5 @@
 import { useState, useEffect } from 'react'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-)
-
+import { supabase } from './lib/supabase'
 // ISO week string → "2026-W16"
 function getWeekString(date) {
   const d = new Date(date)
