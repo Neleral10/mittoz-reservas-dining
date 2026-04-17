@@ -4,7 +4,8 @@ import { Loader2 } from "lucide-react";
 import { supabase, obtenerPerfil } from "./lib/supabase";
 import Landing from "./pages/Landing.jsx";
 import Login from "./pages/Login.jsx";
-import Dashboard from "./pages/Dashboard.jsx";import CorteComisiones from "./CorteComisiones";
+import Dashboard from "./pages/Dashboard.jsx";
+import CorteComisiones from "./CorteComisiones";
 
 export default function App() {
   const [ruta, setRuta] = useState(window.location.pathname);
