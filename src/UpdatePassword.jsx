@@ -9,28 +9,50 @@ export default function UpdatePassword() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get("token");
-    const type = params.get("type");
-    if (token && type === "recovery") {
-      supabase.auth.verifyOtp({ token_hash: token, type: "recovery" })
+    // Supabase manda el token en el hash: #access_token=...&type=recovery
+    const hash = window.location.hash.substring(1);
+    const hashParams = new URLSearchParams(hash);
+    const accessToken = hashParams.get("access_token");
+    const refreshToken = hashParams.get("refresh_token");
+    const type = hashParams.get("type");
+
+    if (accessToken && type === "recovery") {
+      supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken || "" })
         .then(({ error }) => {
           if (error) setMsg("Link inválido o expirado. Solicita uno nuevo.");
           else setReady(true);
         });
     } else {
-      setMsg("Link inválido. Solicita un nuevo reset de contraseña.");
+      // fallback: query param (por si acaso)
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get("token");
+      const qtype = params.get("type");
+      if (token && qtype === "recovery") {
+        supabase.auth.verifyOtp({ token_hash: token, type: "recovery" })
+          .then(({ error }) => {
+            if (error) setMsg("Link inválido o expirado. Solicita uno nuevo.");
+            else setReady(true);
+          });
+      } else {
+        setMsg("Link inválido o expirado. Solicita uno nuevo.");
+      }
     }
   }, []);
 
   async function handleUpdate(e) {
     e.preventDefault();
     if (password !== confirm) { setMsg("Las contraseñas no coinciden"); return; }
+    if (password.length < 6) { setMsg("Mínimo 6 caracteres"); return; }
     setLoading(true);
     const { error } = await supabase.auth.updateUser({ password });
     setLoading(false);
     if (error) setMsg(error.message);
-    else setMsg("✅ Contraseña actualizada. Ya puedes iniciar sesión.");
+    else {
+      setMsg("✅ Contraseña actualizada. Ya puedes iniciar sesión.");
+      setTimeout(() => {
+        window.location.href = "/login";
+      }, 2000);
+    }
   }
 
   return (
