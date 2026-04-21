@@ -11,60 +11,90 @@ export default function UpdatePassword() {
   const [checking, setChecking] = useState(true)
 
   useEffect(() => {
-    // 1) Parsear el HASH de la URL (no query params)
-    //    Supabase envía: #access_token=xxx&refresh_token=yyy&type=recovery
-    const hash = window.location.hash.substring(1) // quita el '#'
-    const params = new URLSearchParams(hash)
-    const accessToken = params.get('access_token')
-    const refreshToken = params.get('refresh_token')
-    const type = params.get('type')
-    const errorDesc = params.get('error_description')
+    let cancelled = false
+    let subscription = null
+    let timeoutId = null
 
-    // 2) Si el link vino con error (expirado, ya usado, etc.)
-    if (errorDesc) {
-      setError(decodeURIComponent(errorDesc.replace(/\+/g, ' ')))
-      setChecking(false)
-      return
-    }
+    const init = async () => {
+      // ===== PATRÓN NUEVO (recomendado): token_hash en query params =====
+      // Resistente a pre-fetch de scanners de email (Gmail, Outlook, etc.)
+      const urlParams = new URLSearchParams(window.location.search)
+      const tokenHash = urlParams.get('token_hash')
+      const qType = urlParams.get('type')
 
-    // 3) Si hay tokens en el hash → establecer sesión
-    if (type === 'recovery' && accessToken && refreshToken) {
-      supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken
-      }).then(({ error }) => {
+      if (tokenHash && qType === 'recovery') {
+        const { error } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: 'recovery'
+        })
+        if (cancelled) return
+        setChecking(false)
+        if (error) {
+          setError('Link inválido o expirado. Solicita uno nuevo desde el login.')
+        } else {
+          setReady(true)
+          window.history.replaceState(null, '', window.location.pathname)
+        }
+        return
+      }
+
+      // ===== PATRÓN VIEJO: hash con access_token/refresh_token =====
+      const hash = window.location.hash.substring(1)
+      const hashParams = new URLSearchParams(hash)
+      const accessToken = hashParams.get('access_token')
+      const refreshToken = hashParams.get('refresh_token')
+      const hashType = hashParams.get('type')
+      const errorDesc = hashParams.get('error_description')
+
+      if (errorDesc) {
+        setError(decodeURIComponent(errorDesc.replace(/\+/g, ' ')))
+        setChecking(false)
+        return
+      }
+
+      if (hashType === 'recovery' && accessToken && refreshToken) {
+        const { error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken
+        })
+        if (cancelled) return
         setChecking(false)
         if (error) {
           setError('Link inválido o expirado. Solicita uno nuevo.')
         } else {
           setReady(true)
-          // Limpia el hash de la URL por seguridad (oculta el token)
           window.history.replaceState(null, '', window.location.pathname)
         }
+        return
+      }
+
+      // ===== FALLBACK: evento PASSWORD_RECOVERY =====
+      const res = supabase.auth.onAuthStateChange((event) => {
+        if (event === 'PASSWORD_RECOVERY' && !cancelled) {
+          setReady(true)
+          setChecking(false)
+        }
       })
-      return
+      subscription = res?.data?.subscription
+
+      timeoutId = setTimeout(() => {
+        if (cancelled) return
+        setChecking(false)
+        setReady(prev => {
+          if (!prev) {
+            setError('Link de recuperación inválido o expirado. Solicita uno nuevo desde la pantalla de login.')
+          }
+          return prev
+        })
+      }, 2500)
     }
 
-    // 4) Fallback: escuchar evento PASSWORD_RECOVERY
-    //    (por si Supabase ya procesó el hash automáticamente)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        setReady(true)
-        setChecking(false)
-      }
-    })
-
-    // 5) Timeout de 2s: si no llegó ni hash ni evento, mostrar error
-    const timeout = setTimeout(() => {
-      setChecking(false)
-      if (!ready) {
-        setError('Link de recuperación inválido o expirado. Solicita un nuevo enlace desde la pantalla de login.')
-      }
-    }, 2000)
+    init()
 
     return () => {
-      subscription?.unsubscribe()
-      clearTimeout(timeout)
+      cancelled = true
+      subscription?.unsubscribe?.()
+      if (timeoutId) clearTimeout(timeoutId)
     }
   }, [])
 
@@ -85,7 +115,6 @@ export default function UpdatePassword() {
       setError(error.message)
     } else {
       setSuccess(true)
-      // Cerrar sesión temporal y redirigir a login tras 2s
       setTimeout(async () => {
         await supabase.auth.signOut()
         window.location.href = '/'
@@ -154,7 +183,6 @@ export default function UpdatePassword() {
     marginTop: 12
   }
 
-  // Estado: verificando token
   if (checking) {
     return (
       <div style={container}>
@@ -166,7 +194,6 @@ export default function UpdatePassword() {
     )
   }
 
-  // Estado: éxito
   if (success) {
     return (
       <div style={container}>
@@ -179,7 +206,6 @@ export default function UpdatePassword() {
     )
   }
 
-  // Estado: error de link (sin form)
   if (!ready && error) {
     return (
       <div style={container}>
@@ -198,7 +224,6 @@ export default function UpdatePassword() {
     )
   }
 
-  // Estado: formulario listo
   return (
     <div style={container}>
       <div style={card}>
