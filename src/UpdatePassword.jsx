@@ -14,9 +14,19 @@ export default function UpdatePassword() {
     let cancelled = false
     let subscription = null
     let timeoutId = null
-
+  
     const init = async () => {
-      // ===== PATRÓN NUEVO (recomendado): token_hash en query params =====
+      // Limpiar cualquier sesión previa para evitar conflictos de lock
+      // entre pestañas o sesiones residuales en localStorage
+      try {
+        Object.keys(localStorage).forEach(key => {
+          if (key.startsWith('sb-') && key.includes('auth-token')) {
+            localStorage.removeItem(key)
+          }
+        })
+      } catch {}
+
+      // ===== PATRÓN NUEVO (recomendado): token_hash en query params =====   // ===== PATRÓN NUEVO (recomendado): token_hash en query params =====
       // Resistente a pre-fetch de scanners de email (Gmail, Outlook, etc.)
       const urlParams = new URLSearchParams(window.location.search)
       const tokenHash = urlParams.get('token_hash')
