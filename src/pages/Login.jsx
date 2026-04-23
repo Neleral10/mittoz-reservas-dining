@@ -19,8 +19,6 @@ export default function Login({ onLoginSuccess }) {
 
      setCargando(true);
 
-    
-
     const { data, error: authError } = await supabase.auth.signInWithPassword({
       email: email.trim().toLowerCase(),
       password,
