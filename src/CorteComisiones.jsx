@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './lib/supabase'
+import PagoComisionModal from './PagoComisionModal'
 // ISO week string → "2026-W16"
 function getWeekString(date) {
   const d = new Date(date)
@@ -58,6 +59,7 @@ export default function CorteComisiones({ userRole }) {
   const [loading, setLoading] = useState(true)
   const [marking, setMarking] = useState(null)
   const [expandedGrupo, setExpandedGrupo] = useState(null)
+  const [pagoModalGrupo, setPagoModalGrupo] = useState(null)
 
   const weekRange = getWeekRange(selectedWeek)
 
@@ -442,6 +444,15 @@ export default function CorteComisiones({ userRole }) {
         </code>{' '}
         Ejemplo: <em>Hotel Xaloc · María</em>
       </div>
+       <PagoComisionModal
+        open={pagoModalGrupo !== null}
+        onClose={() => setPagoModalGrupo(null)}
+        onPagoRegistrado={() => { setPagoModalGrupo(null); fetchData() }}
+        grupo={pagoModalGrupo}
+        semanaCorte={selectedWeek}
+        semanaInicio={weekRange.from}
+        semanaFin={weekRange.to}
+      />
     </div>
   )
 }
