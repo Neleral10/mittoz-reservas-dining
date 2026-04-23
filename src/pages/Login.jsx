@@ -19,14 +19,7 @@ export default function Login({ onLoginSuccess }) {
 
      setCargando(true);
 
-    // Limpiar tokens residuales para evitar conflictos de lock entre pestañas
-    try {
-      Object.keys(localStorage).forEach(key => {
-        if (key.startsWith('sb-') && key.includes('auth-token')) {
-          localStorage.removeItem(key);
-        }
-      });
-    } catch {}
+    /
 
     const { data, error: authError } = await supabase.auth.signInWithPassword({
       email: email.trim().toLowerCase(),
