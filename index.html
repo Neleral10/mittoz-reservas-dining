@@ -11,20 +11,5 @@
   <body style="margin:0;padding:0;background:#0f0a06;">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
-    <script>
-      (function () {
-        console.log('Fix tab-refocus cargado v2');
-        var wasHidden = false;
-        document.addEventListener('visibilitychange', function () {
-          if (document.visibilityState === 'hidden') {
-            wasHidden = true;
-          } else if (document.visibilityState === 'visible' && wasHidden) {
-            wasHidden = false;
-            console.log('Recargando para refrescar Supabase');
-            window.location.reload();
-          }
-        });
-      })();
-    </script>
   </body>
 </html>
