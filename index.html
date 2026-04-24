@@ -1,24 +1,39 @@
-  <script>
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#1a1410" />
+    <meta name="description" content="Reservaciones para los restaurantes de Grupo Mittoz en Isla Holbox: El Nido, Soulbox, Bocamar y Leonessa." />
+    <title>Holbox Dining · Grupo Mittoz</title>
+  </head>
+  <body style="margin:0;padding:0;background:#0f0a06;">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+    <script>
       (function () {
-        console.log('🔧 Fix tab-refocus cargado');
+        console.log('Fix tab-refocus cargado');
         var hiddenAt = null;
         var UMBRAL_MS = 30000;
         document.addEventListener('visibilitychange', function () {
-          console.log('👁️ visibilitychange:', document.visibilityState);
+          console.log('visibilitychange:', document.visibilityState);
           if (document.visibilityState === 'hidden') {
             hiddenAt = Date.now();
-            console.log('⏸️ Pestaña oculta. Contador iniciado.');
+            console.log('Pestana oculta. Contador iniciado.');
           } else if (document.visibilityState === 'visible' && hiddenAt !== null) {
             var ocultoPor = Date.now() - hiddenAt;
             hiddenAt = null;
-            console.log('▶️ Pestaña visible de nuevo. Oculta por:', Math.round(ocultoPor / 1000), 'segundos');
+            console.log('Pestana visible. Oculta por:', Math.round(ocultoPor / 1000), 'segundos');
             if (ocultoPor > UMBRAL_MS) {
-              console.log('🔄 Recargando porque estuvo oculta > 30s');
+              console.log('Recargando porque estuvo oculta mas de 30s');
               window.location.reload();
             } else {
-              console.log('⏭️ No recargo, estuvo oculta menos de 30s');
+              console.log('No recargo, estuvo oculta menos de 30s');
             }
           }
         });
       })();
     </script>
+  </body>
+</html>
