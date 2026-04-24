@@ -13,24 +13,15 @@
     <script type="module" src="/src/main.jsx"></script>
     <script>
       (function () {
-        console.log('Fix tab-refocus cargado');
-        var hiddenAt = null;
-        var UMBRAL_MS = 30000;
+        console.log('Fix tab-refocus cargado v2');
+        var wasHidden = false;
         document.addEventListener('visibilitychange', function () {
-          console.log('visibilitychange:', document.visibilityState);
           if (document.visibilityState === 'hidden') {
-            hiddenAt = Date.now();
-            console.log('Pestana oculta. Contador iniciado.');
-          } else if (document.visibilityState === 'visible' && hiddenAt !== null) {
-            var ocultoPor = Date.now() - hiddenAt;
-            hiddenAt = null;
-            console.log('Pestana visible. Oculta por:', Math.round(ocultoPor / 1000), 'segundos');
-            if (ocultoPor > UMBRAL_MS) {
-              console.log('Recargando porque estuvo oculta mas de 30s');
-              window.location.reload();
-            } else {
-              console.log('No recargo, estuvo oculta menos de 30s');
-            }
+            wasHidden = true;
+          } else if (document.visibilityState === 'visible' && wasHidden) {
+            wasHidden = false;
+            console.log('Recargando para refrescar Supabase');
+            window.location.reload();
           }
         });
       })();
