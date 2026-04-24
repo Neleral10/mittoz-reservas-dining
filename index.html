@@ -11,5 +11,22 @@
   <body style="margin:0;padding:0;background:#0f0a06;">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      (function () {
+        var hiddenAt = null;
+        var UMBRAL_MS = 30000;
+        document.addEventListener('visibilitychange', function () {
+          if (document.visibilityState === 'hidden') {
+            hiddenAt = Date.now();
+          } else if (document.visibilityState === 'visible' && hiddenAt !== null) {
+            var ocultoPor = Date.now() - hiddenAt;
+            hiddenAt = null;
+            if (ocultoPor > UMBRAL_MS) {
+              window.location.reload();
+            }
+          }
+        });
+      })();
+    </script>
   </body>
 </html>
