@@ -11,6 +11,30 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   },
 });
 
+// ============================================================
+// FIX: bug conocido de Supabase "tab refocus kills queries".
+// Cuando la pestaña queda en segundo plano mucho tiempo, el
+// cliente se congela y las queries nunca regresan respuesta.
+// Solución: recargar la página cuando el usuario regresa tras
+// estar oculto más de 30 segundos.
+// ============================================================
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  let hiddenAt = null;
+  const UMBRAL_MS = 30000; // 30 segundos
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      hiddenAt = Date.now();
+    } else if (document.visibilityState === 'visible' && hiddenAt !== null) {
+      const ocultoPor = Date.now() - hiddenAt;
+      hiddenAt = null;
+      if (ocultoPor > UMBRAL_MS) {
+        window.location.reload();
+      }
+    }
+  });
+}
+
 // Catálogo de restaurantes (para mapear ids a nombres bonitos)
 export const RESTAURANTES_INFO = {
   'el-nido': { nombre: 'El Nido', color: '#1a3a2e' },
@@ -23,16 +47,15 @@ export const RESTAURANTES_INFO = {
 export async function obtenerPerfil() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
-
   const { data, error } = await supabase
     .from('perfiles')
     .select('*')
     .eq('id', user.id)
     .single();
-
   if (error) {
     console.error('Error al obtener perfil:', error);
     return null;
   }
   return data;
 }
+P
