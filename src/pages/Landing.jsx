@@ -94,9 +94,9 @@ export default function Landing() {
   const [vista, setVista] = useState("home");
   const [seleccionado, setSeleccionado] = useState(null);
   const [enviando, setEnviando] = useState(false);
-  const [form, setForm] = useState({
+   const [hoteles, setHoteles] = useState([]);
 
-useEffect(() => {
+  useEffect(() => {
     fetch(`${SUPABASE_URL}/rest/v1/fuentes_referencia?tipo=eq.hotel&activo=eq.true&select=id,nombre&order=nombre.asc`, {
       headers: {
         apikey: SUPABASE_ANON_KEY,
@@ -107,7 +107,6 @@ useEffect(() => {
       .then(setHoteles)
       .catch(err => console.error("[fuentes_referencia] No se pudo cargar el catálogo:", err));
   }, []);
-
   const [form, setForm] = useState({
     
     fecha: "",
@@ -602,7 +601,7 @@ ${form.notas ? `\n📝 *Notas:* ${form.notas}` : ""}`;
               />
             </Field>
 
-            <Field label="Hotel donde se hospeda" icon={<Hotel size={14} />}>
+            <Field label="Hotel del huesped" icon={<Hotel size={14} />}>
               <input
                 type="text"
                 list="hoteles-holbox"
