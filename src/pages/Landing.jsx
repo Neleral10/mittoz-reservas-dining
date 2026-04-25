@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { MapPin, Instagram, Calendar, Users, Clock, User, Phone, Hotel, MessageSquare, ArrowLeft, Check, Sparkles, Loader2, LogIn } from "lucide-react";
 
 // ==========================================
@@ -95,12 +95,28 @@ export default function Landing() {
   const [seleccionado, setSeleccionado] = useState(null);
   const [enviando, setEnviando] = useState(false);
   const [form, setForm] = useState({
+
+useEffect(() => {
+    fetch(`${SUPABASE_URL}/rest/v1/fuentes_referencia?tipo=eq.hotel&activo=eq.true&select=id,nombre&order=nombre.asc`, {
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+    })
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(setHoteles)
+      .catch(err => console.error("[fuentes_referencia] No se pudo cargar el catálogo:", err));
+  }, []);
+
+  const [form, setForm] = useState({
+    
     fecha: "",
     hora: "",
     personas: 2,
     nombre: "",
     telefono: "",
     hotel: "",
+   recomendador: "",
     codigoReferidor: "",
     notas: "",
   });
@@ -134,7 +150,7 @@ export default function Landing() {
         personas: form.personas,
         cliente_nombre: form.nombre,
         cliente_telefono: form.telefono || null,
-        cliente_hotel: form.hotel || null,
+          cliente_hotel: [form.hotel, form.recomendador].filter(Boolean).join(" · ") || null,
         notas: form.notas || null,
         codigo_referidor: form.codigoReferidor,
         estado: "pendiente",
@@ -156,6 +172,7 @@ export default function Landing() {
 👤 *Cliente:* ${form.nombre}
 📱 ${form.telefono || "—"}
 🏨 *Hotel:* ${form.hotel || "—"}
+👤 *Recomendó:* ${form.recomendador || "—"}
 
 🎫 *Código referidor:* ${form.codigoReferidor}
 ${form.notas ? `\n📝 *Notas:* ${form.notas}` : ""}`;
@@ -588,13 +605,27 @@ ${form.notas ? `\n📝 *Notas:* ${form.notas}` : ""}`;
             <Field label="Hotel donde se hospeda" icon={<Hotel size={14} />}>
               <input
                 type="text"
+                list="hoteles-holbox"
                 value={form.hotel}
                 onChange={(e) => setForm({ ...form, hotel: e.target.value })}
                 placeholder="Ej. Hotel Palapas del Sol"
                 style={inputStyle}
               />
+                <datalist id="hoteles-holbox">
+                  {hoteles.map(h => (
+                    <option key={h.id} value={h.nombre} />
+                  ))}
+                </datalist>
             </Field>
-
+              <Field label="¿Quién te recomendó?" icon={<User size={14} />}>
+                <input
+                  type="text"
+                  value={form.recomendador}
+                  onChange={(e) => setForm({ ...form, recomendador: e.target.value })}
+                  placeholder="Nombre de la persona (opcional)"
+                  style={inputStyle}
+                />
+              </Field>
             <div style={{
               background: `${seleccionado.color}08`,
               padding: "16px",
