@@ -45,17 +45,13 @@ export default function PagoComisionModal({
     }
 
     setLoading(true)
-    console.log('[Pago] Inicio', { recepcionista: grupo.recepcionista })
 
     try {
-      console.log('[Pago] Paso 1: generando folio...')
       const { data: folio, error: folioErr } = await supabase
         .rpc('generar_folio_comision')
 
       if (folioErr) throw folioErr
-      console.log('[Pago] Paso 1 OK', { folio })
 
-      console.log('[Pago] Paso 2: insertando pago...')
       const { data: pago, error: pagoErr } = await supabase
         .from('pagos_comisiones')
         .insert({
@@ -78,9 +74,7 @@ export default function PagoComisionModal({
         .single()
 
       if (pagoErr) throw pagoErr
-      console.log('[Pago] Paso 2 OK', { pagoId: pago.id })
 
-      console.log('[Pago] Paso 3: vinculando reservas...')
       const reservaIds = grupo.reservas.map(r => r.id)
       const today = new Date().toISOString().split('T')[0]
 
@@ -95,20 +89,14 @@ export default function PagoComisionModal({
         .in('id', reservaIds)
 
       if (linkErr) throw linkErr
-      console.log('[Pago] Paso 3 OK')
 
-      console.log('[Pago] Marcando éxito en UI')
       setPagoRegistrado(pago)
-      console.log('[Pago] Completado exitosamente')
     } catch (e) {
-      console.error('[Pago] Error', e)
       setError(e.message || 'Error al registrar el pago')
     } finally {
       setLoading(false)
-      console.log('[Pago] Finally ejecutado, loading=false')
     }
   }
-
   const handleImprimir = () => {
     window.print()
   }
