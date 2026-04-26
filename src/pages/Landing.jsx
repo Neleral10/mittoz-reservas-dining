@@ -6,7 +6,7 @@ import { MapPin, Instagram, Calendar, Users, Clock, User, Phone, Hotel, MessageS
 // (bypasea el SDK para evitar problemas de caché/sesión)
 // ==========================================
 const SUPABASE_URL = "https://rtmtoyywvqadxkxadgkp.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ0bXRveXl3dnFhZHhreGFkZ2twIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1ODg0MjYsImV4cCI6MjA5MTE2NDQyNn0.c30p6fYH8w4OVL1IOWPq4T6zGJAPqbGBXW9l3vmxhkc";
+const SUPABASE_ANON_KEY = "sb_publishable_klEi5wIiMg6zELDUAJ24vw_ZHDbCFzA";
 
 async function supabaseInsert(table, data) {
   const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
