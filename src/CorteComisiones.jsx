@@ -28,17 +28,33 @@ function getWeekRange(weekStr) {
   }
 }
 
-// Parsea "Hotel Xaloc · María" → { hotel, recepcionista }
-// Si no hay separador · usa el campo completo como nombre del hotel (sin recepcionista asignado)
-function parseHotel(clienteHotel) {
-  if (!clienteHotel || clienteHotel.trim() === '') {
-    return { hotel: '—', recepcionista: 'Sin referidor', tieneRecep: false }
+// Extrae info del referidor priorizando datos de la tabla referidores (vía referidor_id).
+// Fallback: parsea cliente_hotel (compatibilidad con reservas anteriores al campo de código).
+function getReferidorInfo(reserva) {
+  // Caso 1: reserva con referidor_id + JOIN exitoso → fuente de verdad
+  if (reserva.referidores && reserva.referidores.id) {
+    const ref = reserva.referidores
+    return {
+      groupKey: `ref_${ref.id}`,
+      hotel: ref.fuentes_referencia?.nombre || '—',
+      recepcionista: ref.nombre,
+      codigo: ref.codigo,
+      tieneRecep: true,
+      esCodigoReferidor: true
+    }
   }
-  if (clienteHotel.includes(' · ')) {
-    const [hotel, ...rest] = clienteHotel.split(' · ')
-    return { hotel: hotel.trim(), recepcionista: rest.join(' · ').trim(), tieneRecep: true }
+  // Caso 2 (legacy): parsear cliente_hotel
+  const ch = reserva.cliente_hotel
+  if (!ch || ch.trim() === '') {
+    return { groupKey: 'walk-in', hotel: '—', recepcionista: 'Sin referidor', codigo: null, tieneRecep: false, esCodigoReferidor: false }
   }
-  return { hotel: clienteHotel.trim(), recepcionista: clienteHotel.trim(), tieneRecep: false }
+  if (ch.includes(' · ')) {
+    const [hotel, ...rest] = ch.split(' · ')
+    const h = hotel.trim()
+    const r = rest.join(' · ').trim()
+    return { groupKey: `legacy_${h}_${r}`, hotel: h, recepcionista: r, codigo: null, tieneRecep: true, esCodigoReferidor: false }
+  }
+  return { groupKey: `legacy_solo_${ch.trim()}`, hotel: ch.trim(), recepcionista: ch.trim(), codigo: null, tieneRecep: false, esCodigoReferidor: false }
 }
 
 const RESTAURANTES = {
@@ -73,6 +89,8 @@ export default function CorteComisiones({ userRole }) {
         id, fecha, restaurante_id, cliente_nombre, cliente_hotel,
         personas, consumo_subtotal, comision_monto,
         validacion_estado, fecha_pago_comision, semana_corte
+        referidor_id, codigo_referidor,
+        referidores ( id, nombre, codigo, fuentes_referencia ( nombre ) )
       `)
       .eq('estado', 'llegado')
       .not('comision_monto', 'is', null)
@@ -84,27 +102,30 @@ export default function CorteComisiones({ userRole }) {
     setLoading(false)
   }
 
-  // Agrupar por recepcionista
+// Agrupar por referidor_id cuando existe, sino por hotel+recepcionista parseado (legacy)
   const grouped = {}
   reservas.forEach(r => {
-    const { hotel, recepcionista, tieneRecep } = parseHotel(r.cliente_hotel)
-    if (!grouped[recepcionista]) {
-      grouped[recepcionista] = {
-        recepcionista,
-        hotel,
-        tieneRecep,
+    const info = getReferidorInfo(r)
+    if (!grouped[info.groupKey]) {
+      grouped[info.groupKey] = {
+        groupKey: info.groupKey,
+        recepcionista: info.recepcionista,
+        hotel: info.hotel,
+        codigo: info.codigo,
+        tieneRecep: info.tieneRecep,
+        esCodigoReferidor: info.esCodigoReferidor,
         reservas: [],
         totalConsumo: 0,
         totalComision: 0,
         allPagado: true,
       }
     }
-    grouped[recepcionista].reservas.push(r)
-    grouped[recepcionista].totalConsumo += parseFloat(r.consumo_subtotal || 0)
-    grouped[recepcionista].totalComision += parseFloat(r.comision_monto || 0)
-    if (r.validacion_estado !== 'pagado') grouped[recepcionista].allPagado = false
+    grouped[info.groupKey].reservas.push(r)
+    grouped[info.groupKey].totalConsumo += parseFloat(r.consumo_subtotal || 0)
+    grouped[info.groupKey].totalComision += parseFloat(r.comision_monto || 0)
+    if (r.validacion_estado !== 'pagado') grouped[info.groupKey].allPagado = false
   })
-
+  
   const grupos = Object.values(grouped).sort((a, b) =>
     a.allPagado === b.allPagado ? 0 : a.allPagado ? 1 : -1
   )
@@ -125,19 +146,19 @@ export default function CorteComisiones({ userRole }) {
     setMarking(null)
   }
 
-  function exportCSV() {
-    const header = ['Semana', 'Recepcionista', 'Hotel', 'Fecha', 'Restaurante', 'Cliente', 'Personas', 'Consumo', 'Comisión 5%', 'Estado Pago']
+   function exportCSV() {
+    const header = ['Semana', 'Recepcionista', 'Hotel', 'Código', 'Fecha', 'Restaurante', 'Cliente', 'Personas', 'Consumo', 'Comisión 5%', 'Estado Pago']
     const rows = reservas.map(r => {
-      const { hotel, recepcionista } = parseHotel(r.cliente_hotel)
+      const info = getReferidorInfo(r)
       return [
-        selectedWeek, recepcionista, hotel, r.fecha,
+        selectedWeek, info.recepcionista, info.hotel, info.codigo || '—', r.fecha,
         RESTAURANTES[r.restaurante_id] || r.restaurante_id,
         r.cliente_nombre, r.personas,
         r.consumo_subtotal, r.comision_monto,
         r.validacion_estado || 'pendiente'
       ].join(',')
     })
-    const totals = `,,,,,,TOTAL,${grandTotalConsumo.toFixed(2)},${grandTotalComision.toFixed(2)},`
+    const totals = `,,,,,,,TOTAL,${grandTotalConsumo.toFixed(2)},${grandTotalComision.toFixed(2)},`
     const csv = [header.join(','), ...rows, '', totals].join('\n')
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -278,11 +299,15 @@ export default function CorteComisiones({ userRole }) {
                     </span>
                     {grupo.tieneRecep && (
                       <span style={{
-                        fontSize: '0.75rem', color: '#888',
-                        background: '#f0ebe6', borderRadius: 6,
-                        padding: '2px 8px'
+                        fontSize: '0.75rem',
+                        color: grupo.esCodigoReferidor ? '#2e7d32' : '#888',
+                        background: grupo.esCodigoReferidor ? '#e8f5e9' : '#f0ebe6',
+                        borderRadius: 6, padding: '2px 8px',
+                        display: 'inline-flex', alignItems: 'center', gap: '4px'
                       }}>
+                        {grupo.esCodigoReferidor && <span style={{ fontSize: '0.7rem' }}>✓</span>}
                         {grupo.hotel}
+                        {grupo.codigo && <span style={{ opacity: 0.6, fontSize: '0.7rem' }}>· {grupo.codigo}</span>}
                       </span>
                     )}
                     <span style={{
