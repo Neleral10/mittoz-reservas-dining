@@ -95,6 +95,7 @@ export default function Landing() {
   const [seleccionado, setSeleccionado] = useState(null);
   const [enviando, setEnviando] = useState(false);
    const [hoteles, setHoteles] = useState([]);
+   const [validacionCodigo, setValidacionCodigo] = useState({ estado: 'idle', referidor: null });
 
   useEffect(() => {
     fetch(`${SUPABASE_URL}/rest/v1/fuentes_referencia?tipo=eq.hotel&activo=eq.true&select=id,nombre&order=nombre.asc`, {
@@ -107,6 +108,44 @@ export default function Landing() {
       .then(setHoteles)
       .catch(err => console.error("[fuentes_referencia] No se pudo cargar el catálogo:", err));
   }, []);
+
+   useEffect(() => {
+    const codigo = form.codigoReferidor.trim();
+    if (codigo.length === 0) {
+      setValidacionCodigo({ estado: 'idle', referidor: null });
+      return;
+    }
+    if (codigo.length < 6) {
+      setValidacionCodigo({ estado: 'idle', referidor: null });
+      return;
+    }
+    if (!/^\d{6}$/.test(codigo)) {
+      setValidacionCodigo({ estado: 'invalido', referidor: null });
+      return;
+    }
+    setValidacionCodigo({ estado: 'validando', referidor: null });
+    const timer = setTimeout(() => {
+      fetch(`${SUPABASE_URL}/rest/v1/referidores?codigo=eq.${codigo}&activo=eq.true&select=id,nombre,fuente_id,fuentes_referencia(nombre)`, {
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+      })
+        .then(r => r.ok ? r.json() : Promise.reject(r.status))
+        .then(data => {
+          if (data && data.length > 0) {
+            setValidacionCodigo({ estado: 'valido', referidor: data[0] });
+          } else {
+            setValidacionCodigo({ estado: 'invalido', referidor: null });
+          }
+        })
+        .catch(err => {
+          console.error("[validacion código] Error:", err);
+          setValidacionCodigo({ estado: 'invalido', referidor: null });
+        });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [form.codigoReferidor]);
   const [form, setForm] = useState({
     
     fecha: "",
@@ -133,28 +172,39 @@ export default function Landing() {
   };
 
   const enviarReserva = async () => {
-    if (!form.fecha || !form.hora || !form.nombre || !form.codigoReferidor) {
-      alert("Por favor completa: fecha, hora, nombre del cliente y código de referidor.");
+   if (!form.fecha || !form.hora || !form.nombre) {
+      alert("Por favor completa: fecha, hora y nombre del cliente.");
+      return;
+    }
+    if (form.codigoReferidor.trim().length > 0 && validacionCodigo.estado !== 'valido') {
+      alert("El código de referidor no es válido. Déjalo vacío o ingresa un código de 6 dígitos válido.");
       return;
     }
 
     setEnviando(true);
 
+    const tieneReferidorValido = validacionCodigo.estado === 'valido' && validacionCodigo.referidor;
+    const hotelDelReferidor = tieneReferidorValido && validacionCodigo.referidor.fuentes_referencia
+      ? `${validacionCodigo.referidor.fuentes_referencia.nombre} · ${validacionCodigo.referidor.nombre}`
+      : null;
+    const clienteHotelFinal = hotelDelReferidor || [form.hotel, form.recomendador].filter(Boolean).join(" · ") || null;
+
+
     // 1. Guardar en Supabase
     try {
-      await supabaseInsert("reservas", {
+       await supabaseInsert("reservas", {
         restaurante_id: seleccionado.id,
         fecha: form.fecha,
         hora: form.hora,
         personas: form.personas,
         cliente_nombre: form.nombre,
         cliente_telefono: form.telefono || null,
-          cliente_hotel: [form.hotel, form.recomendador].filter(Boolean).join(" · ") || null,
+        cliente_hotel: clienteHotelFinal,
         notas: form.notas || null,
-        codigo_referidor: form.codigoReferidor,
+        codigo_referidor: tieneReferidorValido ? form.codigoReferidor : null,
+        referidor_id: tieneReferidorValido ? validacionCodigo.referidor.id : null,
         estado: "pendiente",
-      });
-    } catch (error) {
+      });    } catch (error) {
       console.error("Error al guardar reserva:", error);
       setEnviando(false);
       alert("⚠️ ERROR al guardar en base de datos:\n\n" + error.message + "\n\nAbre la consola del navegador (F12) para ver el detalle completo. La reserva NO se envió.");
@@ -173,9 +223,8 @@ export default function Landing() {
 🏨 *Hotel:* ${form.hotel || "—"}
 👤 *Recomendó:* ${form.recomendador || "—"}
 
-🎫 *Código referidor:* ${form.codigoReferidor}
+${tieneReferidorValido ? `🎫 *Referidor:* ${validacionCodigo.referidor.nombre} · ${validacionCodigo.referidor.fuentes_referencia?.nombre || "—"} (${form.codigoReferidor})` : "🚶 *Sin referidor* (walk-in)"}
 ${form.notas ? `\n📝 *Notas:* ${form.notas}` : ""}`;
-
     const url = `https://wa.me/${WHATSAPP_DESTINO}?text=${encodeURIComponent(mensaje)}`;
     window.open(url, "_blank");
 
@@ -625,7 +674,7 @@ ${form.notas ? `\n📝 *Notas:* ${form.notas}` : ""}`;
                   style={inputStyle}
                 />
               </Field>
-            <div style={{
+             <div style={{
               background: `${seleccionado.color}08`,
               padding: "16px",
               borderRadius: "12px",
@@ -633,30 +682,41 @@ ${form.notas ? `\n📝 *Notas:* ${form.notas}` : ""}`;
               marginTop: "8px",
               marginBottom: "16px",
             }}>
-              <Field label="🎫 Tu código de referidor" icon={null} required>
+              <Field label="🎫 Código de referidor (opcional)" icon={null}>
                 <input
                   type="text"
+                  inputMode="numeric"
+                  maxLength={6}
                   value={form.codigoReferidor}
-                  onChange={(e) => setForm({ ...form, codigoReferidor: e.target.value.toUpperCase() })}
-                  placeholder="Ej. REC-PALAPA-001"
+                  onChange={(e) => setForm({ ...form, codigoReferidor: e.target.value.replace(/\D/g, "").slice(0, 6) })}
+                  placeholder="6 dígitos"
                   style={{
                     ...inputStyle,
                     fontWeight: 600,
-                    letterSpacing: "0.05em",
+                    letterSpacing: "0.15em",
+                    fontFamily: "'Inter', sans-serif",
                   }}
                 />
               </Field>
-              <div style={{
-                fontSize: "11px",
-                fontFamily: "'Inter', sans-serif",
-                color: "#8b7355",
-                marginTop: "6px",
-                lineHeight: 1.4,
-              }}>
-                Sin código no se contabiliza tu comisión. Si aún no tienes el tuyo, contacta a tu representante Mittoz.
+              {validacionCodigo.estado === 'validando' && (
+                <div style={{ fontSize: "12px", fontFamily: "'Inter', sans-serif", color: "#8b7355", marginTop: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <Loader2 size={12} style={{ animation: "spin 1s linear infinite" }} /> Validando código…
+                </div>
+              )}
+              {validacionCodigo.estado === 'valido' && validacionCodigo.referidor && (
+                <div style={{ fontSize: "12px", fontFamily: "'Inter', sans-serif", color: "#1a7a3e", marginTop: "6px", fontWeight: 600 }}>
+                  ✓ {validacionCodigo.referidor.nombre} · {validacionCodigo.referidor.fuentes_referencia?.nombre || "—"}
+                </div>
+              )}
+              {validacionCodigo.estado === 'invalido' && (
+                <div style={{ fontSize: "12px", fontFamily: "'Inter', sans-serif", color: "#c73e3a", marginTop: "6px", fontWeight: 600 }}>
+                  ✗ Código no válido o inactivo
+                </div>
+              )}
+              <div style={{ fontSize: "11px", fontFamily: "'Inter', sans-serif", color: "#8b7355", marginTop: "8px", lineHeight: 1.4 }}>
+                Si la reserva la hace una recepcionista con código asignado, ingrésalo para registrar la comisión. Si no, déjalo vacío (walk-in).
               </div>
             </div>
-
             <Field label="Notas adicionales" icon={<MessageSquare size={14} />}>
               <textarea
                 value={form.notas}
