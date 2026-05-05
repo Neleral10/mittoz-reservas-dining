@@ -90,7 +90,7 @@ export default function CorteComisiones({ userRole }) {
         personas, consumo_subtotal, comision_monto,
         validacion_estado, fecha_pago_comision, semana_corte
         referidor_id, codigo_referidor,
-        referidores ( id, nombre, codigo, fuentes_referencia ( nombre ) )
+       referidores:referidor_id ( id, nombre, codigo, fuentes_referencia:fuente_id ( nombre ) )
       `)
       .eq('estado', 'llegado')
       .not('comision_monto', 'is', null)
