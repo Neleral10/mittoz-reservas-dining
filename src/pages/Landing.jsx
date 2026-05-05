@@ -7,7 +7,6 @@ import { MapPin, Instagram, Calendar, Users, Clock, User, Phone, Hotel, MessageS
 // ==========================================
 const SUPABASE_URL = "https://rtmtoyywvqadxkxadgkp.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_klEi5wIiMg6zELDUAJ24vw_ZHDbCFzA";
-
 async function supabaseInsert(table, data) {
   const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
     method: "POST",
@@ -109,7 +108,21 @@ export default function Landing() {
       .catch(err => console.error("[fuentes_referencia] No se pudo cargar el catálogo:", err));
   }, []);
 
-   useEffect(() => {
+   
+  const [form, setForm] = useState({
+    
+    fecha: "",
+    hora: "",
+    personas: 2,
+    nombre: "",
+    telefono: "",
+    hotel: "",
+   recomendador: "",
+    codigoReferidor: "",
+    notas: "",
+  });
+
+  useEffect(() => {
     const codigo = form.codigoReferidor.trim();
     if (codigo.length === 0) {
       setValidacionCodigo({ estado: 'idle', referidor: null });
@@ -146,18 +159,6 @@ export default function Landing() {
     }, 400);
     return () => clearTimeout(timer);
   }, [form.codigoReferidor]);
-  const [form, setForm] = useState({
-    
-    fecha: "",
-    hora: "",
-    personas: 2,
-    nombre: "",
-    telefono: "",
-    hotel: "",
-   recomendador: "",
-    codigoReferidor: "",
-    notas: "",
-  });
 
   const abrirReserva = (rest) => {
     setSeleccionado(rest);
