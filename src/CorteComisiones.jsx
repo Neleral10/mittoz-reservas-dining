@@ -81,24 +81,55 @@ export default function CorteComisiones({ userRole }) {
 
   useEffect(() => { fetchData() }, [selectedWeek])
 
-  async function fetchData() {
+   async function fetchData() {
     setLoading(true)
-    const { data, error } = await supabase
+    
+    // Query 1: reservas de la semana (sin embed)
+    const { data: reservasData, error: errReservas } = await supabase
       .from('reservas')
       .select(`
         id, fecha, restaurante_id, cliente_nombre, cliente_hotel,
         personas, consumo_subtotal, comision_monto,
-        validacion_estado, fecha_pago_comision, semana_corte
-        referidor_id, codigo_referidor,
-       referidores:referidor_id ( id, nombre, codigo, fuentes_referencia:fuente_id ( nombre ) )
+        validacion_estado, fecha_pago_comision, semana_corte,
+        referidor_id, codigo_referidor
       `)
       .eq('estado', 'llegado')
       .not('comision_monto', 'is', null)
       .gte('fecha', weekRange.from)
       .lte('fecha', weekRange.to)
       .order('fecha', { ascending: true })
-
-    if (!error) setReservas(data || [])
+    
+    if (errReservas) {
+      console.error('[CorteComisiones] Error reservas:', errReservas)
+      setReservas([])
+      setLoading(false)
+      return
+    }
+    
+    // Query 2: si hay referidor_ids, traer info de referidores + hoteles
+    const referidorIds = [...new Set((reservasData || []).map(r => r.referidor_id).filter(Boolean))]
+    let referidoresMap = {}
+    
+    if (referidorIds.length > 0) {
+      const { data: refsData, error: errRefs } = await supabase
+        .from('referidores')
+        .select('id, nombre, codigo, fuente_id, fuentes_referencia(nombre)')
+        .in('id', referidorIds)
+      
+      if (errRefs) {
+        console.warn('[CorteComisiones] Error referidores (fallback a parsing):', errRefs)
+      } else if (refsData) {
+        refsData.forEach(ref => { referidoresMap[ref.id] = ref })
+      }
+    }
+    
+    // Inyectar info del referidor en cada reserva (compat con getReferidorInfo)
+    const reservasConRef = (reservasData || []).map(r => ({
+      ...r,
+      referidores: r.referidor_id ? referidoresMap[r.referidor_id] || null : null
+    }))
+    
+    setReservas(reservasConRef)
     setLoading(false)
   }
 
