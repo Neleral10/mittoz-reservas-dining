@@ -176,8 +176,8 @@ export default function Landing() {
    if (!form.fecha || !form.hora || !form.nombre) {
       alert("Por favor completa: fecha, hora y nombre del cliente.");
       return;
-    }
-    if (form.codigoReferidor.trim().length > 0 && validacionCodigo.estado !== 'valido') {
+    } if (form.codigoReferidor.trim().length > 0 && validacionCodigo.estado === 'invalido') {
+
       alert("El código de referidor no es válido. Déjalo vacío o ingresa un código de 6 dígitos válido.");
       return;
     }
