@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from './lib/supabase';
 
 // === Único lugar a editar para cambiar el trío, los pitches y los links de reseña ===
@@ -25,7 +25,7 @@ const RESTAURANTES = {
 
 const BENEFICIO = 'bebida'; // 'bebida' | 'descuento_10'
 const TEXTO_BENEFICIO = {
-  bebida: 'una margarita o mojito de cortesía con tu consumo de alimentos',
+  bebida: 'una margarita o mojito de cortesía por persona con tu consumo de alimentos',
   descuento_10: '10% de descuento en tu consumo total',
 };
 const ALFABETO = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // sin 0/O/1/I/L
@@ -44,6 +44,7 @@ export default function CuponCruzado() {
   const [codigo, setCodigo] = useState('');
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
+  const qrRef = useRef(null);
 
   useEffect(() => {
     if (!conf) { setError('Enlace no válido.'); setCargando(false); return; }
@@ -51,6 +52,26 @@ export default function CuponCruzado() {
     if (guardado) { setCodigo(guardado); setCargando(false); return; }
     emitir(0);
   }, []);
+
+  // Renderiza el código como QR para que el staff lo escanee del celular del cliente
+  useEffect(() => {
+    if (!codigo || !qrRef.current) return;
+    const render = () => {
+      if (typeof window.QRCode === 'undefined') return setTimeout(render, 150);
+      qrRef.current.innerHTML = '';
+      new window.QRCode(qrRef.current, {
+        text: codigo, width: 150, height: 150,
+        colorDark: '#16203d', colorLight: '#ffffff',
+        correctLevel: window.QRCode.CorrectLevel.M,
+      });
+    };
+    if (typeof window.QRCode === 'undefined') {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+      s.onload = render;
+      document.head.appendChild(s);
+    } else { render(); }
+  }, [codigo]);
 
   async function emitir(intento) {
     const code = generarCodigo(conf.prefijo);
@@ -82,7 +103,8 @@ export default function CuponCruzado() {
       <div style={S.cuponBox}>
         <div style={S.cuponLabel}>Muestra este código al pedir tu cuenta</div>
         <div style={S.codigo}>{cargando ? '…' : codigo}</div>
-        <div style={S.vigencia}>Válido 7 días · un solo uso</div>
+        {!cargando && <div ref={qrRef} style={S.qrWrap} />}
+        <div style={S.vigencia}>Una bebida por comensal mayor de edad · un escaneo por mesa · válido 7 días</div>
       </div>
 
       <hr style={S.hr} />
@@ -95,7 +117,7 @@ export default function CuponCruzado() {
   );
 }
 
-const NAVY = '#1c2541', GOLD = '#c8a24a';
+const NAVY = '#16203d', GOLD = '#c8a24a';
 const S = {
   wrap: { maxWidth: 480, margin: '0 auto', padding: 24, fontFamily: 'system-ui, sans-serif', color: NAVY },
   h1: { fontSize: 24, textAlign: 'center', marginBottom: 8 },
@@ -106,7 +128,8 @@ const S = {
   cuponBox: { background: NAVY, color: '#fff', borderRadius: 14, padding: 20, textAlign: 'center', margin: '20px 0' },
   cuponLabel: { fontSize: 13, opacity: 0.85 },
   codigo: { fontSize: 30, fontWeight: 800, letterSpacing: 2, color: GOLD, margin: '8px 0' },
-  vigencia: { fontSize: 12, opacity: 0.8 },
+  qrWrap: { background: '#fff', borderRadius: 10, padding: 10, display: 'inline-block', margin: '6px 0' },
+  vigencia: { fontSize: 12, opacity: 0.8, marginTop: 4 },
   hr: { border: 'none', borderTop: '1px solid #eee', margin: '24px 0' },
   reseñaLead: { fontSize: 13, textAlign: 'center', color: '#555', marginBottom: 12 },
   reseñas: { display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' },
@@ -114,4 +137,3 @@ const S = {
   btnAlt: { background: '#fff', color: NAVY, border: `1px solid ${NAVY}`, padding: '10px 16px', borderRadius: 8, textDecoration: 'none', fontWeight: 700 },
   err: { textAlign: 'center', color: '#b00', marginTop: 40 },
 };
-G
