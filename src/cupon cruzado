@@ -1,0 +1,117 @@
+import { useState, useEffect } from 'react';
+import { supabase } from './lib/supabase';
+
+// === Único lugar a editar para cambiar el trío, los pitches y los links de reseña ===
+const RESTAURANTES = {
+  bocamar: {
+    nombre: 'Bocamar', prefijo: 'BOCA',
+    pitch: 'Mariscos frescos frente al mar.',
+    google: 'https://PEGAR_LINK_GOOGLE_BOCAMAR',
+    tripadvisor: 'https://PEGAR_LINK_TRIPADVISOR_BOCAMAR',
+  },
+  soulbox: {
+    nombre: 'Soulbox', prefijo: 'SOUL',
+    pitch: 'Rooftop bar — coctelería y atardeceres sobre Holbox.',
+    google: 'https://PEGAR_LINK_GOOGLE_SOULBOX',
+    tripadvisor: 'https://PEGAR_LINK_TRIPADVISOR_SOULBOX',
+  },
+  elnido: {
+    nombre: 'El Nido', prefijo: 'NIDO',
+    pitch: 'Fine dining — la experiencia de autor del grupo.',
+    google: 'https://PEGAR_LINK_GOOGLE_ELNIDO',
+    tripadvisor: 'https://PEGAR_LINK_TRIPADVISOR_ELNIDO',
+  },
+};
+
+const BENEFICIO = 'bebida'; // 'bebida' | 'descuento_10'
+const TEXTO_BENEFICIO = {
+  bebida: 'una margarita o mojito de cortesía con tu consumo de alimentos',
+  descuento_10: '10% de descuento en tu consumo total',
+};
+const ALFABETO = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // sin 0/O/1/I/L
+
+function generarCodigo(prefijo) {
+  let s = '';
+  for (let i = 0; i < 6; i++) s += ALFABETO[Math.floor(Math.random() * ALFABETO.length)];
+  return `${prefijo}-${s}`;
+}
+
+export default function CuponCruzado() {
+  const origen = (new URLSearchParams(window.location.search).get('origen') || '').toLowerCase();
+  const conf = RESTAURANTES[origen];
+  const destinos = conf ? Object.keys(RESTAURANTES).filter((k) => k !== origen) : [];
+
+  const [codigo, setCodigo] = useState('');
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!conf) { setError('Enlace no válido.'); setCargando(false); return; }
+    const guardado = sessionStorage.getItem(`cupon_${origen}`);
+    if (guardado) { setCodigo(guardado); setCargando(false); return; }
+    emitir(0);
+  }, []);
+
+  async function emitir(intento) {
+    const code = generarCodigo(conf.prefijo);
+    const { error: err } = await supabase.from('cupones_cruzados').insert({
+      codigo: code, restaurante_origen: origen, beneficio: BENEFICIO, estado: 'emitido',
+    });
+    if (err) {
+      if (err.code === '23505' && intento < 3) return emitir(intento + 1); // código repetido
+      setError('No se pudo generar tu cupón. Recarga la página.'); setCargando(false); return;
+    }
+    sessionStorage.setItem(`cupon_${origen}`, code);
+    setCodigo(code); setCargando(false);
+  }
+
+  if (error) return <div style={S.wrap}><p style={S.err}>{error}</p></div>;
+
+  return (
+    <div style={S.wrap}>
+      <h1 style={S.h1}>¡Gracias por visitarnos!</h1>
+      <p style={S.lead}>Como cortesía de Grupo Mittoz, te regalamos {TEXTO_BENEFICIO[BENEFICIO]} en cualquiera de nuestros otros conceptos:</p>
+
+      {destinos.map((k) => (
+        <div key={k} style={S.card}>
+          <div style={S.cardNombre}>{RESTAURANTES[k].nombre}</div>
+          <div style={S.cardPitch}>{RESTAURANTES[k].pitch}</div>
+        </div>
+      ))}
+
+      <div style={S.cuponBox}>
+        <div style={S.cuponLabel}>Muestra este código al pedir tu cuenta</div>
+        <div style={S.codigo}>{cargando ? '…' : codigo}</div>
+        <div style={S.vigencia}>Válido 7 días · un solo uso</div>
+      </div>
+
+      <hr style={S.hr} />
+      <p style={S.reseñaLead}>¿Disfrutaste tu visita? Si gustas, déjanos tu opinión. Es opcional y no afecta tu cortesía.</p>
+      <div style={S.reseñas}>
+        <a href={conf.google} target="_blank" rel="noopener noreferrer" style={S.btn}>Reseña en Google</a>
+        <a href={conf.tripadvisor} target="_blank" rel="noopener noreferrer" style={S.btnAlt}>Reseña en TripAdvisor</a>
+      </div>
+    </div>
+  );
+}
+
+const NAVY = '#1c2541', GOLD = '#c8a24a';
+const S = {
+  wrap: { maxWidth: 480, margin: '0 auto', padding: 24, fontFamily: 'system-ui, sans-serif', color: NAVY },
+  h1: { fontSize: 24, textAlign: 'center', marginBottom: 8 },
+  lead: { fontSize: 15, lineHeight: 1.5, textAlign: 'center', marginBottom: 20 },
+  card: { border: `1px solid ${GOLD}`, borderRadius: 12, padding: 14, marginBottom: 10 },
+  cardNombre: { fontWeight: 700, color: GOLD, fontSize: 17 },
+  cardPitch: { fontSize: 14, marginTop: 4 },
+  cuponBox: { background: NAVY, color: '#fff', borderRadius: 14, padding: 20, textAlign: 'center', margin: '20px 0' },
+  cuponLabel: { fontSize: 13, opacity: 0.85 },
+  codigo: { fontSize: 30, fontWeight: 800, letterSpacing: 2, color: GOLD, margin: '8px 0' },
+  vigencia: { fontSize: 12, opacity: 0.8 },
+  hr: { border: 'none', borderTop: '1px solid #eee', margin: '24px 0' },
+  reseñaLead: { fontSize: 13, textAlign: 'center', color: '#555', marginBottom: 12 },
+  reseñas: { display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' },
+  btn: { background: GOLD, color: NAVY, padding: '10px 16px', borderRadius: 8, textDecoration: 'none', fontWeight: 700 },
+  btnAlt: { background: '#fff', color: NAVY, border: `1px solid ${NAVY}`, padding: '10px 16px', borderRadius: 8, textDecoration: 'none', fontWeight: 700 },
+  err: { textAlign: 'center', color: '#b00', marginTop: 40 },
+};
+G
