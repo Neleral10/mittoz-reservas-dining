@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import UpdatePassword from "./UpdatePassword";
+import CuponCruzado from './CuponCruzado';
+import CanjeCupon from './CanjeCupon';
 import { Loader2 } from "lucide-react";
 import { supabase, obtenerPerfil } from "./lib/supabase";
 import Landing from "./pages/Landing.jsx";
@@ -65,6 +67,9 @@ export default function App() {
   if (ruta.startsWith("/update-password")) {
     return <UpdatePassword token={new URLSearchParams(window.location.search).get("token")} />;
   }
+  if (ruta.startsWith("/cupon")) return <CuponCruzado />;
+  if (ruta.startsWith("/canje")) return <CanjeCupon />;
+
   if (cargandoSesion) {
     return (
       <div style={{
