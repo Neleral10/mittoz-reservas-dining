@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';.jsx
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from './lib/supabase';
 
 // === Único lugar a editar para cambiar el trío, los pitches y los links de reseña ===
