@@ -2,7 +2,13 @@ import { useState, useRef, useEffect } from 'react';
 import { supabase } from './lib/supabase';
 
 // === Etiquetas de los restaurantes ===
-const LOCALES = { bocamar: 'Bocamar', soulbox: 'Soulbox', elnido: 'El Nido' };
+const LOCALES = { bocamar: 'Bocamar', soulbox: 'Soulbox', elnido: 'El Nido', leonessa: 'Leonessa' };
+const ORIGENES = { ...LOCALES, hotelmittoz: 'Hotel Mittoz' };
+const BENEFICIOS = {
+  bebida: 'Mojito, margarita o limonada por persona',
+  combo_leonessa: 'Pan + café americano a $100 por persona',
+  descuento_10: '10% de descuento',
+};
 
 // Lee ?local= de la URL para fijar el restaurante en cada caja (opcional)
 const localURL = (new URLSearchParams(window.location.search).get('local') || '').toLowerCase();
@@ -21,6 +27,8 @@ export default function CanjeCupon() {
   const [mensaje, setMensaje] = useState('');
   const [comensales, setComensales] = useState(1);
   const [folio, setFolio] = useState('');
+  const [alimentos, setAlimentos] = useState(false);
+  const [opciones, setOpciones] = useState([]); // varios cupones al buscar por WhatsApp
   const [exito, setExito] = useState(null);
 
   const [scanning, setScanning] = useState(false);
@@ -37,7 +45,34 @@ export default function CanjeCupon() {
 
   function limpiar() {
     setCodigo(''); setEstado('idle'); setCupon(null); setMensaje('');
-    setComensales(1); setFolio(''); setExito(null);
+    setComensales(1); setFolio(''); setAlimentos(false); setOpciones([]); setExito(null);
+  }
+
+  // --- Reglas de dónde se puede canjear cada cupón ---
+  function validar(data) {
+    if (data.estado === 'canjeado') {
+      return `Ya fue canjeado el ${fmt(data.canjeado_en)}${data.canjeado_por ? ' por ' + data.canjeado_por : ''}.`;
+    }
+    if (data.estado === 'expirado' || (data.expira_en && new Date(data.expira_en) < new Date())) {
+      return `Cupón vencido (expiró el ${fmt(data.expira_en)}).`;
+    }
+    if (data.beneficio === 'combo_leonessa' && local !== 'leonessa') {
+      return 'Este cupón es del combo de pan y café: se canjea solo en Leonessa.';
+    }
+    if (data.beneficio !== 'combo_leonessa' && local === 'leonessa') {
+      return 'Este cupón es de bebida: se canjea en Bocamar, Soulbox o El Nido, no en Leonessa.';
+    }
+    if (data.restaurante_origen === local) {
+      return `Este cupón se emitió en ${ORIGENES[data.restaurante_origen]}. Debe canjearse en otro restaurante.`;
+    }
+    return null;
+  }
+
+  function elegir(data) {
+    const motivo = validar(data);
+    if (motivo) { setEstado('rechazado'); setMensaje(motivo); setCupon(null); return; }
+    setOpciones([]); setCupon(data);
+    setComensales(Math.min(data.personas_max || 1, 10)); setEstado('ok'); setMensaje('');
   }
 
   // --- Buscar y validar el código ---
@@ -46,35 +81,42 @@ export default function CanjeCupon() {
     if (!code) return;
     if (!local) { setEstado('rechazado'); setMensaje('Primero selecciona en qué restaurante estás canjeando.'); return; }
 
-    setEstado('buscando'); setMensaje(''); setCupon(null);
+    setEstado('buscando'); setMensaje(''); setCupon(null); setOpciones([]);
+
+    // ¿Escribieron un WhatsApp en lugar del código? (cliente que perdió su cupón)
+    const tel = code.replace(/\D/g, '');
+    if (tel.length >= 10 && tel.length === code.replace(/[\s-]/g, '').length) {
+      const { data, error } = await supabase
+        .from('cupones_cruzados').select('*')
+        .eq('cliente_whatsapp', tel.slice(-10)).eq('estado', 'emitido')
+        .gt('expira_en', new Date().toISOString())
+        .order('expira_en', { ascending: false });
+      if (error) { setEstado('rechazado'); setMensaje('Error al consultar. Revisa tu conexión e intenta de nuevo.'); return; }
+      const validos = (data || []).filter((d) => !validar(d));
+      if (validos.length === 0) { setEstado('rechazado'); setMensaje('Ese WhatsApp no tiene cupones vigentes para canjear aquí.'); return; }
+      if (validos.length === 1) return elegir(validos[0]);
+      setOpciones(validos); setEstado('idle'); return;
+    }
 
     const { data, error } = await supabase
       .from('cupones_cruzados').select('*').eq('codigo', code).maybeSingle();
 
     if (error) { setEstado('rechazado'); setMensaje('Error al consultar. Revisa tu conexión e intenta de nuevo.'); return; }
     if (!data) { setEstado('rechazado'); setMensaje('Código no encontrado. Verifícalo con el cliente.'); return; }
-
-    if (data.estado === 'canjeado') {
-      setEstado('rechazado');
-      setMensaje(`Ya fue canjeado el ${fmt(data.canjeado_en)}${data.canjeado_por ? ' por ' + data.canjeado_por : ''}.`);
-      return;
-    }
-    if (data.estado === 'expirado' || (data.expira_en && new Date(data.expira_en) < new Date())) {
-      setEstado('rechazado'); setMensaje(`Cupón vencido (expiró el ${fmt(data.expira_en)}).`); return;
-    }
-    if (data.restaurante_origen === local) {
-      setEstado('rechazado');
-      setMensaje(`Este cupón se emitió en ${LOCALES[data.restaurante_origen]}. Debe canjearse en otro restaurante, no en ${LOCALES[local]}.`);
-      return;
-    }
-    setCupon(data); setEstado('ok');
+    elegir(data);
   }
 
   // --- Confirmar el canje ---
   async function confirmar() {
     if (!cupon) return;
-    if (!folio.trim()) { setMensaje('Captura el folio del ticket de Soft Restaurante.'); return; }
-    if (!comensales || comensales < 1) { setMensaje('Indica cuántos comensales (mayores de edad) reciben bebida.'); return; }
+    if (!folio.trim()) { setMensaje('Captura el folio de la cuenta donde se aplica la cortesía.'); return; }
+    if (!comensales || comensales < 1) { setMensaje('Indica cuántas personas reciben la cortesía.'); return; }
+    if (cupon.personas_max && Number(comensales) > cupon.personas_max) {
+      setMensaje(`Este cupón ampara máximo ${cupon.personas_max} personas.`); return;
+    }
+    if (cupon.beneficio === 'bebida' && !alimentos) {
+      setMensaje('La bebida solo aplica si la mesa pide entrada o plato fuerte.'); return;
+    }
 
     setEstado('guardando'); setMensaje('');
 
@@ -88,6 +130,7 @@ export default function CanjeCupon() {
         restaurante_destino: local,
         comensales: Number(comensales),
         folio_ticket: folio.trim(),
+        consumo_alimentos: cupon.beneficio === 'bebida' ? alimentos : null,
       })
       .eq('id', cupon.id)
       .eq('estado', 'emitido')
@@ -168,10 +211,10 @@ export default function CanjeCupon() {
 
       {estado !== 'exito' && (
         <>
-          <label style={S.label}>Código del cliente</label>
+          <label style={S.label}>Código del cliente o su WhatsApp</label>
           <div style={{ display: 'flex', gap: 8 }}>
             <input style={{ ...S.input, flex: 1, textTransform: 'uppercase' }} value={codigo}
-              placeholder="EJ: BOCA-AB3K9P"
+              placeholder="EJ: BOCA-AB3K9P o 9841234567"
               onChange={(e) => setCodigo(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') buscar(); }} />
             <button style={S.btnGold} onClick={() => buscar()}>Buscar</button>
@@ -193,20 +236,49 @@ export default function CanjeCupon() {
         <p style={estado === 'rechazado' ? S.alertRed : S.alertAmber}>{mensaje}</p>
       )}
 
+      {opciones.length > 0 && (
+        <div style={S.panelOk}>
+          <div style={S.okTitle}>Cupones vigentes de ese WhatsApp</div>
+          {opciones.map((o) => (
+            <button key={o.id} style={{ ...S.btnGhost, textAlign: 'left' }} onClick={() => elegir(o)}>
+              {o.codigo} · {BENEFICIOS[o.beneficio]} · {o.cliente_nombre || 'sin nombre'}
+            </button>
+          ))}
+        </div>
+      )}
+
       {estado === 'ok' && cupon && (
         <div style={S.panelOk}>
           <div style={S.okTitle}>✓ Cupón válido</div>
+          {cupon.requiere_revision && (
+            <p style={S.alertAmber}>Cupón marcado para revisión ({cupon.motivo_revision}). Puedes canjearlo; administración lo revisará.</p>
+          )}
           <div style={S.row}><span style={S.k}>Código</span><span style={S.v}>{cupon.codigo}</span></div>
-          <div style={S.row}><span style={S.k}>Emitido en</span><span style={S.v}>{LOCALES[cupon.restaurante_origen]}</span></div>
-          <div style={S.row}><span style={S.k}>Beneficio</span><span style={S.v}>{cupon.beneficio === 'descuento_10' ? '10% de descuento' : 'Margarita/mojito por persona'}</span></div>
+          <div style={S.row}><span style={S.k}>Cliente</span><span style={S.v}>{cupon.cliente_nombre || '—'}</span></div>
+          <div style={S.row}><span style={S.k}>Emitido en</span><span style={S.v}>{ORIGENES[cupon.restaurante_origen]}</span></div>
+          <div style={S.row}><span style={S.k}>Beneficio</span><span style={S.v}>{BENEFICIOS[cupon.beneficio]}</span></div>
+          <div style={S.row}><span style={S.k}>Máximo</span><span style={S.v}>{cupon.personas_max ? `${cupon.personas_max} personas` : '—'}</span></div>
           <div style={S.row}><span style={S.k}>Vence</span><span style={S.v}>{fmt(cupon.expira_en)}</span></div>
 
-          <label style={S.label}>Comensales mayores de edad con consumo de alimentos</label>
-          <input style={S.input} type="number" min="1" value={comensales}
-            onChange={(e) => setComensales(e.target.value)} />
+          <label style={S.label} htmlFor="comensales">
+            {cupon.beneficio === 'combo_leonessa' ? 'Combos a $100' : 'Personas que reciben bebida'}
+          </label>
+          <select id="comensales" style={S.input} value={comensales} onChange={(e) => setComensales(e.target.value)}>
+            {Array.from({ length: cupon.personas_max || 10 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
 
-          <label style={S.label}>Folio del ticket (Soft Restaurante)</label>
-          <input style={S.input} value={folio} placeholder="Folio de la cuenta"
+          {cupon.beneficio === 'bebida' && (
+            <>
+              <label style={{ ...S.label, display: 'flex', gap: 8, alignItems: 'center', fontWeight: 600 }}>
+                <input type="checkbox" checked={alimentos} onChange={(e) => setAlimentos(e.target.checked)} />
+                La mesa pidió entrada o plato fuerte
+              </label>
+              <p style={S.dim}>Mojito y margarita solo a mayores de 18. Menores: limonada.</p>
+            </>
+          )}
+
+          <label style={S.label} htmlFor="folio">Folio de la cuenta donde se aplica</label>
+          <input id="folio" style={S.input} value={folio} placeholder="Folio de la cuenta"
             onChange={(e) => setFolio(e.target.value)} />
 
           <button style={{ ...S.btnGold, width: '100%', marginTop: 14, padding: 14 }} onClick={confirmar}>
@@ -221,8 +293,8 @@ export default function CanjeCupon() {
         <div style={S.panelOk}>
           <div style={S.okTitle}>✓ Canjeado</div>
           <div style={S.row}><span style={S.k}>Código</span><span style={S.v}>{exito.codigo}</span></div>
-          <div style={S.row}><span style={S.k}>De → a</span><span style={S.v}>{LOCALES[exito.restaurante_origen]} → {LOCALES[exito.restaurante_destino]}</span></div>
-          <div style={S.row}><span style={S.k}>Bebidas</span><span style={S.v}>{exito.comensales}</span></div>
+          <div style={S.row}><span style={S.k}>De → a</span><span style={S.v}>{ORIGENES[exito.restaurante_origen]} → {LOCALES[exito.restaurante_destino]}</span></div>
+          <div style={S.row}><span style={S.k}>{exito.beneficio === 'combo_leonessa' ? 'Combos' : 'Bebidas'}</span><span style={S.v}>{exito.comensales}</span></div>
           <div style={S.row}><span style={S.k}>Folio</span><span style={S.v}>{exito.folio_ticket}</span></div>
           <div style={S.row}><span style={S.k}>Hora</span><span style={S.v}>{fmt(exito.canjeado_en)}</span></div>
           <button style={{ ...S.btnGhost, width: '100%', marginTop: 14 }} onClick={limpiar}>Canjear otro</button>
