@@ -28,8 +28,13 @@ function extraerJSON(texto) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });
-  const llave = process.env.ANTHROPIC_API_KEY;
+  const llave = (process.env.ANTHROPIC_API_KEY || '').trim();
   if (!llave) return res.status(501).json({ error: 'Lectura automática no configurada' });
+  // La variable debe traer solo la llave (una línea, sin espacios ni comandos).
+  if (/\s/.test(llave) || !llave.startsWith('sk-ant-')) {
+    console.error('leer-ticket: ANTHROPIC_API_KEY mal formada');
+    return res.status(500).json({ error: 'Llave mal configurada', detalle: 'llave_mal_formada' });
+  }
 
   const { imagen } = req.body || {};
   if (!imagen || typeof imagen !== 'string' || imagen.length > 4_000_000) {
@@ -67,7 +72,8 @@ export default async function handler(req, res) {
     texto = (j.content || []).map((c) => c.text || '').join('');
     return res.status(200).json(extraerJSON(texto));
   } catch (e) {
-    console.error('leer-ticket', e.message, texto.slice(0, 300));
-    return res.status(502).json({ error: 'No se pudo leer el ticket', detalle: e.message });
+    const msg = String(e.message || '').replace(/sk-ant-[\w-]+/g, '[llave]');
+    console.error('leer-ticket', msg.slice(0, 200), texto.slice(0, 300));
+    return res.status(502).json({ error: 'No se pudo leer el ticket', detalle: e.name === 'SyntaxError' || msg === 'sin JSON' ? 'respuesta_no_json' : 'error_interno' });
   }
 }
