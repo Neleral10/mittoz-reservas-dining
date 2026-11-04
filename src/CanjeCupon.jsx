@@ -88,7 +88,7 @@ export default function CanjeCupon() {
     if (tel.length >= 10 && tel.length === code.replace(/[\s-]/g, '').length) {
       const { data, error } = await supabase
         .from('cupones_cruzados').select('*')
-        .eq('cliente_whatsapp', tel.slice(-10)).eq('estado', 'emitido')
+        .like('cliente_whatsapp', `%${tel.slice(-10)}`).eq('estado', 'emitido') // con o sin lada
         .gt('expira_en', new Date().toISOString())
         .order('expira_en', { ascending: false });
       if (error) { setEstado('rechazado'); setMensaje('Error al consultar. Revisa tu conexión e intenta de nuevo.'); return; }

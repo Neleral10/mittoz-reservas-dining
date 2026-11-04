@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from './lib/supabase';
+import { IDIOMAS, TEXTOS, idiomaInicial, guardarIdioma } from './cuponTextos.jsx';
 
 // =====================================================================
 // Cortesías cruzadas Mittoz · página que abre el QR del portacuentas
@@ -31,9 +32,11 @@ const generarCodigo = (prefijo) => {
   return `${prefijo}-${s}`;
 };
 const hoyISO = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Cancun' });
-const fmtFecha = (iso) => new Date(iso).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
+const fmtFecha = (iso, locale = 'es-MX') => new Date(iso).toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Cancun' });
 const nombresDestinos = (origen) => DESTINOS_BEBIDA.filter((k) => k !== origen).map((k) => NEGOCIOS[k].nombre);
-const unirConO = (arr) => arr.length <= 1 ? arr.join('') : `${arr.slice(0, -1).join(', ')} o ${arr[arr.length - 1]}`;
+const unirConO = (arr, o = 'o') => arr.length <= 1 ? arr.join('') : `${arr.slice(0, -1).join(', ')} ${o} ${arr[arr.length - 1]}`;
+// WhatsApp: 10 dígitos = México (se antepone 52); con lada internacional se guarda completo
+const normalizarTel = (v) => { const d = v.replace(/\D/g, ''); return d.length === 10 ? `52${d}` : d; };
 const leerGuardado = () => { try { return JSON.parse(localStorage.getItem(CLAVE_GUARDADO) || 'null'); } catch { return null; } };
 const guardar = (v) => { try { localStorage.setItem(CLAVE_GUARDADO, JSON.stringify(v)); } catch { /* sin almacenamiento */ } };
 
@@ -72,6 +75,12 @@ export default function CuponCruzado() {
   if (origen === 'nido') origen = 'elnido';
   const conf = NEGOCIOS[origen];
 
+  const [idioma, setIdioma] = useState(idiomaInicial);
+  const t = TEXTOS[idioma];
+  const locale = IDIOMAS.find((i) => i.id === idioma).locale;
+  const cambiarIdioma = (id) => { setIdioma(id); guardarIdioma(id); };
+  const selector = <SelectorIdioma actual={idioma} onCambio={cambiarIdioma} />;
+
   const [paso, setPaso] = useState('form'); // form | enviando | listo
   const [foto, setFoto] = useState(null);   // dataURL
   const [lectura, setLectura] = useState(null);
@@ -93,7 +102,7 @@ export default function CuponCruzado() {
     if (g && g.origen === origen && new Date(g.expira) > new Date()) { setResultado(g); setPaso('listo'); }
   }, []);
 
-  if (!conf) return <Marco><p style={S.err}>Este enlace no es válido. Escanea de nuevo el código del portacuentas.</p></Marco>;
+  if (!conf) return <Marco>{selector}<p style={S.err}>{t.enlaceInvalido}</p></Marco>;
 
   const conTicket = conf.ticket !== 'ninguno';
   const personasDesdeTicket = conf.ticket === 'soft' && !manual && lectura?.personas;
@@ -128,7 +137,7 @@ export default function CuponCruzado() {
       if (manual) motivos.push('captura manual');
       if (lectura?.fecha) {
         const dias = (new Date(hoyISO()) - new Date(lectura.fecha)) / 86400000;
-        if (dias > 1) return { bloqueo: 'El ticket debe ser de hoy o de ayer.' };
+        if (dias > 1) return { bloqueo: t.errViejo };
         if (dias < 0) motivos.push('fecha del ticket en el futuro');
       }
       if (conf.ticket === 'soft' && lectura && lectura.sistema !== 'soft_restaurant') motivos.push('el ticket no parece de Soft Restaurant');
@@ -144,14 +153,14 @@ export default function CuponCruzado() {
   async function enviar(e) {
     e.preventDefault();
     setError('');
-    const tel = whatsapp.replace(/\D/g, '');
-    if (conTicket && !foto) return setError('Toma la foto de tu ticket.');
-    if (conTicket && !folio.trim()) return setError('Escribe el folio de tu ticket.');
-    if (!conTicket && !habitacion) return setError('Elige tu número de habitación.');
-    if (!personas) return setError('Indica cuántas personas.');
-    if (nombre.trim().length < 2) return setError('Escribe tu nombre.');
-    if (tel.length < 10) return setError('Escribe tu WhatsApp a 10 dígitos.');
-    if (!aceptaAviso) return setError('Para generar tu cupón acepta el aviso de privacidad.');
+    const tel = normalizarTel(whatsapp);
+    if (conTicket && !foto) return setError(t.errFoto);
+    if (conTicket && !folio.trim()) return setError(t.errFolio);
+    if (!conTicket && !habitacion) return setError(t.errHab);
+    if (!personas) return setError(t.errPersonas);
+    if (nombre.trim().length < 2) return setError(t.errNombre);
+    if (tel.length < 11 || tel.length > 15) return setError(t.errTel);
+    if (!aceptaAviso) return setError(t.errAviso);
 
     const rev = revisar();
     if (rev.bloqueo) return setError(rev.bloqueo);
@@ -173,7 +182,7 @@ export default function CuponCruzado() {
 
     const base = {
       restaurante_origen: origen, estado: 'emitido', expira_en: expira, grupo,
-      cliente_nombre: nombre.trim(), cliente_whatsapp: tel.slice(-10), acepta_promos: aceptaPromos,
+      cliente_nombre: nombre.trim(), cliente_whatsapp: tel, acepta_promos: aceptaPromos,
       folio_origen: folioFinal, personas_max: Number(personas),
       foto_ticket: rutaFoto, lectura_ticket: lectura,
       requiere_revision: (rev.motivos.length > 0) || (conTicket && !rutaFoto),
@@ -196,47 +205,46 @@ export default function CuponCruzado() {
       }
       if (err.code === '23505' && /folio/.test(err.message || '')) {
         setPaso('form');
-        return setError(conTicket
-          ? 'Este ticket ya generó su cortesía. Cada cuenta da un cupón.'
-          : 'Esta habitación ya generó su cortesía hoy.');
+        return setError(conTicket ? t.errUsado : t.errHabUsada);
       }
       if (err.code !== '23505') break; // otro error
     }
     setPaso('form');
-    setError('No se pudo generar tu cupón. Revisa tu señal e intenta de nuevo.');
+    setError(t.errRed);
   }
 
   if (paso === 'listo' && resultado) {
-    return <Cupones r={resultado} conf={conf} onOtro={() => { guardar(null); setResultado(null); setPaso('form'); }} />;
+    return <Cupones r={resultado} conf={conf} t={t} locale={locale} selector={selector} onOtro={() => { guardar(null); setResultado(null); setPaso('form'); }} />;
   }
 
   const opcionesPersonas = Array.from({ length: conf.maxPersonas }, (_, i) => i + 1);
 
   return (
     <Marco>
-      <div style={S.eyebrow}>{origen === 'hotelmittoz' ? 'Bienvenido a' : origen === 'leonessa' ? 'Gracias por tu visita a' : 'Gracias por comer en'}</div>
+      {selector}
+      <div style={S.eyebrow}>{origen === 'hotelmittoz' ? t.saludoHotel : origen === 'leonessa' ? t.saludoLeonessa : t.saludoRest}</div>
       <h1 style={S.h1}>{conf.nombre}</h1>
       <p style={S.lead}>
-        Tu próxima bebida va por nuestra cuenta: mojito, margarita o limonada en <b>{unirConO(nombresDestinos(origen))}</b>
-        {origen !== 'leonessa' && <>, más pan y café americano a <b>$100</b> en Leonessa</>}.
+        {t.leadBebida(unirConO(nombresDestinos(origen), t.o))}
+        {origen !== 'leonessa' && t.leadCombo}.
       </p>
 
       <form onSubmit={enviar} style={S.form}>
         {conTicket && (
           <div style={S.bloque}>
-            <label style={S.label} htmlFor="foto">1. Toma una foto de tu ticket</label>
+            <label style={S.label} htmlFor="foto">1. {t.pasoFoto}</label>
             <input id="foto" type="file" accept="image/*" capture="environment" onChange={onFoto} style={S.file} />
-            {foto && <img src={foto} alt="Tu ticket" style={S.preview} />}
-            {leyendo && <p style={S.dim}>Leyendo tu ticket…</p>}
+            {foto && <img src={foto} alt={t.tuTicket} style={S.preview} />}
+            {leyendo && <p style={S.dim}>{t.leyendo}</p>}
             {lectura && !manual && (
-              <p style={S.ok}>Leímos tu ticket: folio <b>{folio}</b>{personasDesdeTicket ? <> · {personas} {Number(personas) === 1 ? 'persona' : 'personas'}</> : null}</p>
+              <p style={S.ok}>{t.leido(folio, personasDesdeTicket ? t.persona(Number(personas)) : null)}</p>
             )}
             {manual && (
               <>
-                <p style={S.warn}>No pudimos leer la foto. Escribe el folio que aparece en tu ticket.</p>
-                <label style={S.label} htmlFor="folio">{conf.ticket === 'leonessa' ? 'Número de recibo' : 'Folio'}</label>
+                <p style={S.warn}>{t.noLeido}</p>
+                <label style={S.label} htmlFor="folio">{conf.ticket === 'leonessa' ? t.recibo : t.folio}</label>
                 <input id="folio" style={S.input} value={folio} onChange={(e) => setFolio(e.target.value)}
-                  placeholder={conf.ticket === 'leonessa' ? 'Ej. 1-3925' : 'Ej. B24311'} />
+                  placeholder={`${t.ej} ${conf.ticket === 'leonessa' ? '1-3925' : 'B24311'}`} />
               </>
             )}
           </div>
@@ -244,9 +252,9 @@ export default function CuponCruzado() {
 
         {!conTicket && (
           <div style={S.bloque}>
-            <label style={S.label} htmlFor="hab">1. Tu habitación</label>
+            <label style={S.label} htmlFor="hab">1. {t.pasoHab}</label>
             <select id="hab" style={S.input} value={habitacion} onChange={(e) => setHabitacion(e.target.value)}>
-              <option value="">Elige…</option>
+              <option value="">{t.elige}</option>
               {HABITACIONES_MITTOZ.map((h) => <option key={h} value={h}>{h === '207' ? '207 · Casa Mittoz' : h}</option>)}
             </select>
           </div>
@@ -254,46 +262,43 @@ export default function CuponCruzado() {
 
         {mostrarPersonas && (
           <div style={S.bloque}>
-            <label style={S.label} htmlFor="personas">2. ¿Cuántas personas?</label>
+            <label style={S.label} htmlFor="personas">2. {t.cuantas}</label>
             <select id="personas" style={S.input} value={personas} onChange={(e) => setPersonas(e.target.value)}>
-              <option value="">Elige…</option>
+              <option value="">{t.elige}</option>
               {opcionesPersonas.map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
           </div>
         )}
 
         <div style={S.bloque}>
-          <label style={S.label} htmlFor="nombre">{mostrarPersonas ? '3' : '2'}. Tus datos</label>
-          <input id="nombre" style={S.input} value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Nombre" autoComplete="name" />
+          <label style={S.label} htmlFor="nombre">{mostrarPersonas ? '3' : '2'}. {t.datos}</label>
+          <input id="nombre" style={S.input} value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder={t.nombre} autoComplete="name" />
           <input style={{ ...S.input, marginTop: 8 }} value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)}
-            placeholder="WhatsApp (10 dígitos)" inputMode="tel" autoComplete="tel" aria-label="WhatsApp" />
+            placeholder={t.whatsapp} inputMode="tel" autoComplete="tel" aria-label="WhatsApp" />
         </div>
 
         <label style={S.check}>
           <input type="checkbox" checked={aceptaAviso} onChange={(e) => setAceptaAviso(e.target.checked)} />
-          <span>Acepto el <button type="button" style={S.link} onClick={() => setVerAviso(!verAviso)}>aviso de privacidad</button></span>
+          <span>{t.acepto} <button type="button" style={S.link} onClick={() => setVerAviso(!verAviso)}>{t.aviso}</button></span>
         </label>
-        {verAviso && <AvisoPrivacidad />}
+        {verAviso && <AvisoPrivacidad t={t} />}
         <label style={S.check}>
           <input type="checkbox" checked={aceptaPromos} onChange={(e) => setAceptaPromos(e.target.checked)} />
-          <span>Quiero recibir promociones de Grupo Mittoz por WhatsApp (opcional)</span>
+          <span>{t.promos}</span>
         </label>
 
         {error && <p style={S.err}>{error}</p>}
         <button type="submit" style={S.btn} disabled={paso === 'enviando' || leyendo}>
-          {paso === 'enviando' ? 'Generando…' : 'Obtener mi cortesía'}
+          {paso === 'enviando' ? t.generando : t.obtener}
         </button>
-        <p style={S.letra}>
-          Válido {VIGENCIA_DIAS} días, un solo uso, con consumo de alimentos (entrada o plato fuerte).
-          Mojito y margarita solo para mayores de 18.
-        </p>
+        <p style={S.letra}>{t.letraForm(VIGENCIA_DIAS)}</p>
       </form>
     </Marco>
   );
 }
 
 // ---------- Pantalla con los cupones ----------
-function Cupones({ r, conf, onOtro }) {
+function Cupones({ r, conf, t, locale, selector, onOtro }) {
   const qrs = useRef({});
   useEffect(() => {
     cargarQR().then(() => {
@@ -308,10 +313,11 @@ function Cupones({ r, conf, onOtro }) {
     });
   }, [r]);
 
-  const destinos = unirConO(nombresDestinos(r.origen));
+  const destinos = unirConO(nombresDestinos(r.origen), t.o);
   const texto = (c) => c.beneficio === 'combo_leonessa'
-    ? { titulo: 'Pan + café americano a $100', donde: 'en Leonessa' }
-    : { titulo: 'Mojito, margarita o limonada de cortesía', donde: `en ${destinos}` };
+    ? { titulo: t.tituloCombo, donde: t.dondeCombo }
+    : { titulo: t.tituloBebida, donde: t.dondeBebida(destinos) };
+  const vence = fmtFecha(r.expira, locale);
 
   async function guardarImagen() {
     const W = 720, H = 300 + r.cupones.length * 260;
@@ -319,8 +325,8 @@ function Cupones({ r, conf, onOtro }) {
     const g = c.getContext('2d');
     g.fillStyle = PETROLEO; g.fillRect(0, 0, W, H);
     g.fillStyle = CORAL; g.fillRect(0, 0, W, 150);
-    g.fillStyle = PETROLEO; g.font = 'bold 40px sans-serif'; g.fillText('Cortesía Mittoz', 40, 70);
-    g.font = '22px sans-serif'; g.fillText(`${r.nombre} · ${r.personas} ${r.personas === 1 ? 'persona' : 'personas'}`, 40, 115);
+    g.fillStyle = PETROLEO; g.font = 'bold 40px sans-serif'; g.fillText(t.imgTitulo, 40, 70);
+    g.font = '22px sans-serif'; g.fillText(`${r.nombre} · ${t.persona(r.personas)}`, 40, 115);
     let y = 190;
     r.cupones.forEach((cp) => {
       const t = texto(cp);
@@ -333,17 +339,18 @@ function Cupones({ r, conf, onOtro }) {
       y += 260;
     });
     g.fillStyle = ARENA; g.font = '20px sans-serif';
-    g.fillText(`Vence el ${fmtFecha(r.expira)}`, 40, H - 70);
-    g.fillText('Con consumo de alimentos · un solo uso', 40, H - 40);
+    g.fillText(t.imgVence(vence), 40, H - 70);
+    g.fillText(t.imgPie, 40, H - 40);
     const a = document.createElement('a');
     a.href = c.toDataURL('image/png'); a.download = `cortesia-mittoz-${r.cupones[0].codigo}.png`; a.click();
   }
 
   return (
     <Marco>
-      <div style={S.eyebrow}>¡Listo, {r.nombre}!</div>
-      <h1 style={S.h1}>Tu cortesía</h1>
-      <p style={S.lead}>Muéstrale este código a tu mesero. Ampara hasta <b>{r.personas} {r.personas === 1 ? 'persona' : 'personas'}</b> y vence el <b>{fmtFecha(r.expira)}</b>.</p>
+      {selector}
+      <div style={S.eyebrow}>{t.listo(r.nombre)}</div>
+      <h1 style={S.h1}>{t.tuCortesia}</h1>
+      <p style={S.lead}>{t.muestra(t.persona(r.personas), vence)}</p>
       {r.cupones.map((c) => {
         const t = texto(c);
         return (
@@ -357,27 +364,37 @@ function Cupones({ r, conf, onOtro }) {
           </div>
         );
       })}
-      <button style={S.btn} onClick={guardarImagen}>Guardar en mi celular</button>
-      <p style={S.letra}>Con consumo de alimentos (entrada o plato fuerte). Un solo uso. Mojito y margarita solo para mayores de 18.</p>
+      <button style={S.btn} onClick={guardarImagen}>{t.guardar}</button>
+      <p style={S.letra}>{t.letraCupon}</p>
       {!conf.google.includes('PEGAR_') && (
         <>
           <hr style={S.hr} />
-          <p style={S.dimC}>¿Te gustó tu visita a {conf.nombre}? Si quieres, déjanos tu opinión. Es opcional y no cambia tu cortesía.</p>
-          <a href={conf.google} target="_blank" rel="noopener noreferrer" style={S.btnAlt}>Opinar en Google</a>
+          <p style={S.dimC}>{t.opinion(conf.nombre)}</p>
+          <a href={conf.google} target="_blank" rel="noopener noreferrer" style={S.btnAlt}>{t.opinar}</a>
         </>
       )}
-      <button style={S.btnTexto} onClick={onOtro}>Generar cortesía de otra cuenta</button>
+      <button style={S.btnTexto} onClick={onOtro}>{t.otra}</button>
     </Marco>
   );
 }
 
-function AvisoPrivacidad() {
+function AvisoPrivacidad({ t }) {
   return (
     <div style={S.aviso}>
-      <p><b>Aviso de privacidad simplificado.</b> Mittoz Group SA de CV, con domicilio en Benito Juárez esquina Palomino, Isla Holbox, Lázaro Cárdenas, Quintana Roo, CP 77310, es responsable de los datos que nos proporcionas: nombre, número de WhatsApp y foto de tu ticket.</p>
-      <p><b>Para qué los usamos:</b> generar y validar tu cupón, evitar su uso indebido y enviarte tu cupón y recordatorios por WhatsApp.</p>
-      <p><b>Fines adicionales:</b> con tu autorización, enviarte promociones de Hotel Mittoz, Mayan Mittoz, Bocamar, Soulbox, El Nido y Leonessa. Puedes negarte dejando sin marcar la casilla o escribiéndonos en cualquier momento.</p>
-      <p>No compartimos tus datos con terceros, salvo proveedores que nos ayudan a operar este servicio. Para ejercer tus derechos de acceso, rectificación, cancelación u oposición escribe a privacidad@grupomittoz.com.</p>
+      {t.avisoTexto.map((p, i) => <p key={i}>{p}</p>)}
+    </div>
+  );
+}
+
+function SelectorIdioma({ actual, onCambio }) {
+  return (
+    <div style={S.idiomas} role="group" aria-label="Idioma / Language">
+      {IDIOMAS.map((i) => (
+        <button key={i.id} type="button" lang={i.id} aria-pressed={actual === i.id} title={i.nombre}
+          onClick={() => onCambio(i.id)} style={actual === i.id ? S.idiomaOn : S.idioma}>
+          {i.etiqueta}
+        </button>
+      ))}
     </div>
   );
 }
@@ -420,4 +437,7 @@ const S = {
   codigo: { fontSize: 22, fontWeight: 800, letterSpacing: 1, fontFamily: 'ui-monospace, monospace', color: TURQUESA },
   cuponTitulo: { fontSize: 16, fontWeight: 700, marginTop: 4, lineHeight: 1.3 },
   hr: { border: 'none', borderTop: '1px solid #d9cdb8', margin: '24px 0' },
+  idiomas: { display: 'flex', gap: 6, justifyContent: 'flex-end', marginBottom: 14 },
+  idioma: { minWidth: 44, minHeight: 36, padding: '6px 10px', borderRadius: 999, border: `1.5px solid ${PETROLEO}`, background: 'transparent', color: PETROLEO, fontWeight: 700, fontSize: 13, cursor: 'pointer' },
+  idiomaOn: { minWidth: 44, minHeight: 36, padding: '6px 10px', borderRadius: 999, border: `1.5px solid ${PETROLEO}`, background: PETROLEO, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' },
 };
