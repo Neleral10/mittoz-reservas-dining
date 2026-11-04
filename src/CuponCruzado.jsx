@@ -37,6 +37,7 @@ const nombresDestinos = (origen) => DESTINOS_BEBIDA.filter((k) => k !== origen).
 const unirConO = (arr, o = 'o') => arr.length <= 1 ? arr.join('') : `${arr.slice(0, -1).join(', ')} ${o} ${arr[arr.length - 1]}`;
 // WhatsApp: 10 dígitos = México (se antepone 52); con lada internacional se guarda completo
 const normalizarTel = (v) => { const d = v.replace(/\D/g, ''); return d.length === 10 ? `52${d}` : d; };
+const esCorreo = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim());
 const leerGuardado = () => { try { return JSON.parse(localStorage.getItem(CLAVE_GUARDADO) || 'null'); } catch { return null; } };
 const guardar = (v) => { try { localStorage.setItem(CLAVE_GUARDADO, JSON.stringify(v)); } catch { /* sin almacenamiento */ } };
 
@@ -153,13 +154,14 @@ export default function CuponCruzado() {
   async function enviar(e) {
     e.preventDefault();
     setError('');
-    const tel = normalizarTel(whatsapp);
+    const correo = whatsapp.includes('@') ? whatsapp.trim().toLowerCase() : '';
+    const tel = correo ? '' : normalizarTel(whatsapp);
     if (conTicket && !foto) return setError(t.errFoto);
     if (conTicket && !folio.trim()) return setError(t.errFolio);
     if (!conTicket && !habitacion) return setError(t.errHab);
     if (!personas) return setError(t.errPersonas);
     if (nombre.trim().length < 2) return setError(t.errNombre);
-    if (tel.length < 11 || tel.length > 15) return setError(t.errTel);
+    if (correo ? !esCorreo(correo) : (tel.length < 11 || tel.length > 15)) return setError(t.errTel);
     if (!aceptaAviso) return setError(t.errAviso);
 
     const rev = revisar();
@@ -182,7 +184,7 @@ export default function CuponCruzado() {
 
     const base = {
       restaurante_origen: origen, estado: 'emitido', expira_en: expira, grupo,
-      cliente_nombre: nombre.trim(), cliente_whatsapp: tel, acepta_promos: aceptaPromos,
+      cliente_nombre: nombre.trim(), cliente_whatsapp: tel || null, ...(correo ? { cliente_email: correo } : {}), acepta_promos: aceptaPromos,
       folio_origen: folioFinal, personas_max: Number(personas),
       foto_ticket: rutaFoto, lectura_ticket: lectura,
       requiere_revision: (rev.motivos.length > 0) || (conTicket && !rutaFoto),
@@ -274,7 +276,9 @@ export default function CuponCruzado() {
           <label style={S.label} htmlFor="nombre">{mostrarPersonas ? '3' : '2'}. {t.datos}</label>
           <input id="nombre" style={S.input} value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder={t.nombre} autoComplete="name" />
           <input style={{ ...S.input, marginTop: 8 }} value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)}
-            placeholder={t.whatsapp} inputMode="tel" autoComplete="tel" aria-label="WhatsApp" />
+            placeholder={t.whatsapp} inputMode={whatsapp.includes('@') || /[a-z]/i.test(whatsapp) ? 'email' : 'text'}
+            autoComplete="tel" aria-label="WhatsApp" />
+          <p style={S.ayuda}>{t.contactoAyuda}</p>
         </div>
 
         <label style={S.check}>
@@ -437,6 +441,7 @@ const S = {
   codigo: { fontSize: 22, fontWeight: 800, letterSpacing: 1, fontFamily: 'ui-monospace, monospace', color: TURQUESA },
   cuponTitulo: { fontSize: 16, fontWeight: 700, marginTop: 4, lineHeight: 1.3 },
   hr: { border: 'none', borderTop: '1px solid #d9cdb8', margin: '24px 0' },
+  ayuda: { fontSize: 12, lineHeight: 1.4, color: '#3d6b73', margin: '6px 2px 0' },
   idiomas: { display: 'flex', gap: 6, justifyContent: 'flex-end', marginBottom: 14 },
   idioma: { minWidth: 44, minHeight: 36, padding: '6px 10px', borderRadius: 999, border: `1.5px solid ${PETROLEO}`, background: 'transparent', color: PETROLEO, fontWeight: 700, fontSize: 13, cursor: 'pointer' },
   idiomaOn: { minWidth: 44, minHeight: 36, padding: '6px 10px', borderRadius: 999, border: `1.5px solid ${PETROLEO}`, background: PETROLEO, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' },

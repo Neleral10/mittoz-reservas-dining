@@ -83,17 +83,21 @@ export default function CanjeCupon() {
 
     setEstado('buscando'); setMensaje(''); setCupon(null); setOpciones([]);
 
-    // ¿Escribieron un WhatsApp en lugar del código? (cliente que perdió su cupón)
+    // ¿Escribieron un WhatsApp o un correo en lugar del código? (cliente que perdió su cupón)
+    const correo = code.includes('@') ? code.toLowerCase() : '';
     const tel = code.replace(/\D/g, '');
-    if (tel.length >= 10 && tel.length === code.replace(/[\s-]/g, '').length) {
-      const { data, error } = await supabase
-        .from('cupones_cruzados').select('*')
-        .like('cliente_whatsapp', `%${tel.slice(-10)}`).eq('estado', 'emitido') // con o sin lada
+    const esTel = tel.length >= 10 && tel.length === code.replace(/[\s\-+()]/g, '').length;
+    if (correo || esTel) {
+      let q = supabase.from('cupones_cruzados').select('*');
+      q = correo
+        ? q.eq('cliente_email', correo)
+        : q.like('cliente_whatsapp', `%${tel.slice(-10)}`); // con o sin lada
+      const { data, error } = await q.eq('estado', 'emitido')
         .gt('expira_en', new Date().toISOString())
         .order('expira_en', { ascending: false });
       if (error) { setEstado('rechazado'); setMensaje('Error al consultar. Revisa tu conexión e intenta de nuevo.'); return; }
       const validos = (data || []).filter((d) => !validar(d));
-      if (validos.length === 0) { setEstado('rechazado'); setMensaje('Ese WhatsApp no tiene cupones vigentes para canjear aquí.'); return; }
+      if (validos.length === 0) { setEstado('rechazado'); setMensaje(`Ese ${correo ? 'correo' : 'WhatsApp'} no tiene cupones vigentes para canjear aquí.`); return; }
       if (validos.length === 1) return elegir(validos[0]);
       setOpciones(validos); setEstado('idle'); return;
     }
@@ -211,10 +215,10 @@ export default function CanjeCupon() {
 
       {estado !== 'exito' && (
         <>
-          <label style={S.label}>Código del cliente o su WhatsApp</label>
+          <label style={S.label}>Código del cliente, su WhatsApp o su correo</label>
           <div style={{ display: 'flex', gap: 8 }}>
             <input style={{ ...S.input, flex: 1, textTransform: 'uppercase' }} value={codigo}
-              placeholder="EJ: BOCA-AB3K9P o 9841234567"
+              placeholder="EJ: BOCA-AB3K9P, 9841234567 o correo"
               onChange={(e) => setCodigo(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') buscar(); }} />
             <button style={S.btnGold} onClick={() => buscar()}>Buscar</button>
