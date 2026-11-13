@@ -1,5 +1,23 @@
 import { useState, useEffect, useRef } from 'react';
-import { supabase } from './lib/supabase';
+import { createClient } from '@supabase/supabase-js';
+import { SUPABASE_URL, SUPABASE_KEY } from './lib/supabase';
+
+// Cliente propio para la página pública del cupón: sin sesión guardada ni
+// renovación de token. Si en el celular quedó una sesión vieja (p. ej. de
+// /canje), la renovación podía dejar las llamadas colgadas en "Generando…".
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+});
+
+// Corta una espera que no responde, para no dejar al cliente atorado.
+function conLimite(promesa, ms, etiqueta) {
+  return Promise.race([
+    promesa,
+    new Promise((_, rej) => setTimeout(() => rej(new Error(`${etiqueta}: sin respuesta en ${ms / 1000} s`)), ms)),
+  ]);
+}
+const nuevoId = () => (crypto && crypto.randomUUID ? crypto.randomUUID()
+  : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = (Math.random() * 16) | 0; return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16); }));
 import { IDIOMAS, TEXTOS, idiomaInicial, guardarIdioma } from './cuponTextos.jsx';
 
 // =====================================================================
@@ -168,18 +186,21 @@ export default function CuponCruzado() {
     if (rev.bloqueo) return setError(rev.bloqueo);
 
     setPaso('enviando');
+    try {
     const folioFinal = conTicket ? folio.trim().toUpperCase() : `HAB-${habitacion}-${hoyISO().replace(/-/g, '')}`;
     // Vence al final del día (hora de Holbox) del tercer día
     const ultimoDia = new Date(Date.now() + VIGENCIA_DIAS * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Cancun' });
     const expira = new Date(`${ultimoDia}T23:59:59-05:00`).toISOString();
-    const grupo = crypto.randomUUID();
+    const grupo = nuevoId();
 
     let rutaFoto = null;
     if (foto) {
       rutaFoto = `${origen}/${hoyISO()}/${grupo}.jpg`;
-      const { error: errFoto } = await supabase.storage.from('tickets-cupones')
-        .upload(rutaFoto, await dataUrlABlob(foto), { contentType: 'image/jpeg' });
-      if (errFoto) rutaFoto = null; // no detiene el cupón; queda para revisión
+      try {
+        const { error: errFoto } = await conLimite(supabase.storage.from('tickets-cupones')
+          .upload(rutaFoto, await dataUrlABlob(foto), { contentType: 'image/jpeg' }), 20000, 'foto');
+        if (errFoto) { console.error('foto', errFoto); rutaFoto = null; }
+      } catch (ef) { console.error('foto', ef); rutaFoto = null; } // no detiene el cupón; queda para revisión
     }
 
     const base = {
@@ -192,11 +213,12 @@ export default function CuponCruzado() {
     };
     const tipos = origen === 'leonessa' ? ['bebida'] : ['bebida', 'combo_leonessa'];
 
+    let ultimoError = '';
     for (let intento = 0; intento < 3; intento++) {
       const filas = tipos.map((t) => ({
         ...base, beneficio: t, codigo: generarCodigo(t === 'combo_leonessa' ? 'CAFE' : conf.prefijo),
       }));
-      const { error: err } = await supabase.from('cupones_cruzados').insert(filas);
+      const { error: err } = await conLimite(supabase.from('cupones_cruzados').insert(filas), 20000, 'cupón');
       if (!err) {
         const res = {
           origen, expira, personas: Number(personas), nombre: nombre.trim(),
@@ -209,10 +231,15 @@ export default function CuponCruzado() {
         setPaso('form');
         return setError(conTicket ? t.errUsado : t.errHabUsada);
       }
-      if (err.code !== '23505') break; // otro error
+      if (err.code !== '23505') { console.error('cupón', err); ultimoError = err.message || err.code; break; } // otro error
     }
     setPaso('form');
-    setError(t.errRed);
+    setError(t.errRed + (ultimoError ? ` (${ultimoError})` : ''));
+    } catch (ex) {
+      console.error('enviar', ex);
+      setPaso('form');
+      setError(t.errRed + ` (${ex.message || ex})`);
+    }
   }
 
   if (paso === 'listo' && resultado) {
